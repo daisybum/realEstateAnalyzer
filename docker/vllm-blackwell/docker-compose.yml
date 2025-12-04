@@ -1,0 +1,107 @@
+version: '3.8'
+
+services:
+  vllm-qwen3-vl-30b:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: vllm-blackwell:cuda13.0-v0.12.0
+    container_name: vllm-qwen3-vl-30b
+
+    # GPU configuration
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [ gpu ]
+
+    # Environment variables
+    environment:
+      # CUDA paths - Point to the MOUNTED host CUDA 13.0 toolkit
+      - CUDA_HOME=/usr/local/cuda-13.0
+      # Do NOT override PATH here, it breaks system paths.
+      # We rely on Dockerfile or manual setup.
+      # If we really need to add to PATH, we should do it in a wrapper script or Dockerfile.
+      # For now, we'll assume the standard PATH is fine, and we might need to call full paths if needed.
+      # But wait, we need ptxas in PATH for Triton?
+      # We set TRITON_PTXAS_PATH, so that handles Triton.
+
+      # We DO need LD_LIBRARY_PATH for the runtime to find libraries.
+      # But we can't easily append in docker-compose environment.
+      # We will set it in Dockerfile to preserve existing paths.
+      # - LD_LIBRARY_PATH=...
+
+      # Blackwell-specific compiler overrides
+      - TRITON_PTXAS_PATH=/usr/local/cuda-13.0/bin/ptxas
+      - TORCH_CUDA_ARCH_LIST=12.1a
+      - NVCC_THREADS=8
+
+      # vLLM configuration
+      - VLLM_CONFIGURE_LOGGING=1
+      - VLLM_LOGGING_LEVEL=INFO
+      - VLLM_ATTENTION_BACKEND=FLASH_ATTN
+
+      # Model configuration
+      - MODEL_NAME=Qwen/Qwen3-VL-30B-A3B-Instruct
+      - TENSOR_PARALLEL_SIZE=1
+      - GPU_MEMORY_UTILIZATION=0.90
+      - MAX_MODEL_LEN=32768
+      - TRUST_REMOTE_CODE=true
+      # HuggingFace token (optional, for gated models)
+      # - HF_TOKEN=${HF_TOKEN}
+
+      # Volume mounts
+    volumes:
+      # Model cache persistence (Use host cache to avoid re-download)
+      - ~/.cache/huggingface:/root/.cache/huggingface
+
+      # Host CUDA toolkit mount (critical for sm_121a support)
+      - /usr/local/cuda-13.0:/usr/local/cuda-13.0:ro
+
+      # Mount project root for code editing and execution
+      - ../../..:/workspace/app
+
+      # Mount realEstateCrawler output for data access
+      - ../../../realEstateCrawler/output:/workspace/data
+
+      # Optional: Mount custom models
+      # - ./models:/workspace/models:ro
+
+      # Shared memory for multi-processing
+      - /dev/shm:/dev/shm
+
+    # Network configuration
+    ports:
+      - "8000:8000" # API server port
+
+    # IPC mode for better performance
+    ipc: host
+
+    # Startup command
+    command: >
+      vllm serve ${MODEL_NAME} --tensor-parallel-size ${TENSOR_PARALLEL_SIZE} --gpu-memory-utilization ${GPU_MEMORY_UTILIZATION} --max-model-len ${MAX_MODEL_LEN} --trust-remote-code --host 0.0.0.0 --port 8000
+
+    # Restart policy
+    restart: unless-stopped
+
+    # Health check
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8000/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5m
+    # Resource limits (optional)
+    # mem_limit: 256g
+    # memswap_limit: 256g
+
+volumes:
+  huggingface-cache:
+    driver: local
+
+# Network configuration (optional)
+# networks:
+#   vllm-network:
+#     driver: bridge
