@@ -1,0 +1,7 @@
+[submodule "Qwen3-VL"]
+	path = Qwen3-VL
+	url = https://github.com/QwenLM/Qwen3-VL.git
+
+[submodule "DeepSeek-OCR"]
+	path = DeepSeek-OCR
+	url = https://github.com/DeepSeek-OCR/DeepSeek-OCR.git
