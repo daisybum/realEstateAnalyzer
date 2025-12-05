@@ -193,13 +193,25 @@ manager.py
 
 ## 🛠️ Configuration
 
-### 환경 변수
+### 빠른 시작
+
+```bash
+# 1. 환경변수 설정
+cp .env.example .env
+# .env 파일에서 LANGSMITH_API_KEY 입력
+
+# 2. Docker 실행 (자동으로 .env 로드)
+cd docker/vllm-blackwell
+docker-compose up -d
+```
+
+### 환경 변수 (.env.example 참조)
 
 | 변수 | 설명 | 기본값 |
 |------|------|--------|
 | `LANGSMITH_API_KEY` | LangSmith API 키 | - |
 | `LANGSMITH_TRACING` | 트레이싱 활성화 | `false` |
-| `LANGSMITH_PROJECT` | 프로젝트 이름 | - |
+| `LANGSMITH_PROJECT` | 프로젝트 이름 | `realEstateAnalyzer` |
 
 ### config.yaml 설정
 
@@ -207,6 +219,11 @@ manager.py
 prompts:
   templates_dir: "prompts/templates"
   environment: "prod"  # dev / staging / prod
+
+langsmith:
+  enabled: false  # true로 활성화
+  project: "realEstateAnalyzer"
+  tracing: false
 ```
 
 ---
