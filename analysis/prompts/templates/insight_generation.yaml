@@ -1,0 +1,59 @@
+_type: chat
+name: insight_generation
+version: "1.0.0"
+description: "지역 입지 평가 및 최종 투자 의견서 작성"
+tags: ["prod", "core"]
+
+input_variables:
+  - region_name
+  - fact_data
+  - verification_result
+  - risk_analysis
+
+messages:
+  - role: system
+    content_ref: base_system.yaml
+    
+  - role: user
+    content: |
+      [STEP 2~4. 지역 입지 평가 및 최종 투자 의견서 작성]
+      앞선 팩트 추출, 시각적 검증, 리스크 분석 결과를 종합하여 '월급쟁이부자들' 스타일의 지역 분석 보고서를 작성하십시오.
+      
+      [입력 데이터]
+      - 지역명: {region_name}
+      - 팩트 데이터: {fact_data}
+      - 시각적 검증: {verification_result}
+      - 리스크/심리: {risk_analysis}
+      
+      [작성 양식 (Markdown)]
+      # 🏠️ {region_name} 지역 분석 보고서
+      
+      ## 1. 지역 개요 및 입지 등급 (Grade Evaluation)
+      *각 입지 요소를 S/A/B/C 등급으로 평가하고 근거를 제시할 것.*
+      - **직장 (Jobs)**: [등급] - (주요 출퇴근 권역 및 소요 시간)
+      - **교통 (Traffic)**: [등급] - (핵심 지하철 노선 및 호재)
+      - **학군 (School)**: [등급] - (특목고 진학률 및 학원가 규모)
+      - **환경 (Environment)**: [등급] - (상권, 자연환경, 쾌적성)
+      - **공급 (Supply)**: [안전/주의/위험] - (향후 3년 물량 분석)
+      
+      ## 2. 지역 분위기 및 임장 뉘앙스
+      - **현장 분위기**: (주민들의 활력, 상권 이용 행태 등)
+      - **부동산 사장님 코멘트**: (매수/매도 우위, 급매물 소진 속도 등)
+      
+      ## 3. 주요 단지 분석 (Top Picks)
+      *보고서에 언급된 주요 단지들이 있다면 분석, 없으면 생략 가능*
+      - **[단지명]**:
+        - 투자금: (매매가 - 전세가)
+        - 특징: (보고서 내용을 바탕으로 한 장점/단점)
+      
+      ## 4. 최종 투자 결론
+      - **지역 평가**: [저평가 구간 / 적정 가치 / 고평가 주의]
+      - **투자 전략**: (예: A급지인 OO구는 현재 전세가율이 낮아 투자금이 많이 들므로, B급지인 XX동을 먼저 보는 것이 유리함 등)
+      - **Action Plan**: (구체적인 행동 지침)
+      
+      ---
+      *Constraint: 추측을 배제하고 제공된 데이터와 시각적 증거에 기반하여 냉철하게 평가하십시오.*
+
+metadata:
+  author: "realEstateAnalyzer"
+  created_at: "2024-12-05"

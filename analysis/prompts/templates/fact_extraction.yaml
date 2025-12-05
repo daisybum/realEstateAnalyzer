@@ -1,0 +1,45 @@
+_type: chat
+name: fact_extraction
+version: "1.0.0"
+description: "지역 및 단지 데이터 정밀 추출"
+tags: ["prod", "core"]
+
+input_variables:
+  - report_text
+
+messages:
+  - role: system
+    content_ref: base_system.yaml
+    
+  - role: user
+    content: |
+      [STEP 1. 지역 및 단지 데이터 정밀 추출]
+      제공된 임장 보고서의 텍스트와 표 이미지를 분석하여 다음 핵심 데이터를 JSON 형식으로 추출하십시오.
+      
+      [추출 항목]
+      1. 지역 정보 (Regional Info):
+         - region_name: 분석 대상 지역명 (예: 용인시 수지구, 성남시 분당구)
+         - population: 인구수 (언급된 경우)
+         - supply_status: 향후 3년 입주 물량 상태 (부족/적정/과잉)
+      
+      2. 입지 데이터 (J-T-S-E):
+         - jobs_rating: 직장 등급 또는 평가 (S/A/B/C)
+         - transport_rating: 교통 등급 또는 주요 노선 (신분당선, GTX 등)
+         - school_rating: 학군 등급 또는 학업 성취도 평가
+         - environment_rating: 환경/상권 등급 (백화점, 대형마트 등)
+      
+      3. 단지별 상세 분석 (Complexes):
+         *보고서에 특정 단지에 대한 상세 분석(시세, 전세가율, 투자금 등)이 있는 경우에만 추출. 단순 언급은 제외.*
+         - list of objects, each containing:
+           - name: 단지명
+           - price_current: 현재 매매가
+           - gap_price: 투자금 (매매가 - 전세가)
+           - comments: 해당 단지에 대한 핵심 코멘트 (1문장)
+      
+      [보고서 텍스트]
+      {report_text}
+
+metadata:
+  author: "realEstateAnalyzer"
+  created_at: "2024-12-05"
+  updated_at: "2024-12-05"
