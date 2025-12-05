@@ -1,96 +1,144 @@
-import os
+"""
+Data Loader Module
+
+파일 시스템에서 부동산 보고서 데이터를 로드하는 모듈
+"""
+import logging
 from typing import List, Dict, Optional, Union
 from pathlib import Path
+from dataclasses import dataclass
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class ReportData:
+    """보고서 데이터 컨테이너"""
+    id: str
+    text: str
+    images: List[str]
+    pdf: Optional[str] = None
+    pptx: Optional[str] = None
+    
+    @property
+    def is_empty(self) -> bool:
+        """보고서가 비어있는지 확인"""
+        return not self.text and not self.images
+
 
 class DataLoader:
-    def __init__(self, base_path: str):
+    """파일 시스템 기반 데이터 로더
+    
+    보고서 폴더 구조:
+        base_path/
+        ├── {report_id}/
+        │   ├── {report_id}.txt
+        │   ├── image_1.png
+        │   ├── image_2.png
+        │   └── report.pdf (optional)
+    """
+    
+    def __init__(self, base_path: Union[str, Path]):
         """
-        Initialize the DataLoader.
-        
         Args:
-            base_path: The base directory containing report folders (e.g., ~/realEstateCrawler/output/)
+            base_path: 보고서 폴더들이 위치한 기본 디렉토리
         """
         self.base_path = Path(base_path).expanduser()
-
+        
+        if not self.base_path.exists():
+            logger.warning(f"Base path does not exist: {self.base_path}")
+    
     def get_report_ids(self) -> List[str]:
-        """
-        Get a list of all report IDs (folder names) in the base path.
-        Sorted in descending order by post_id (largest first).
+        """모든 보고서 ID 목록 반환 (최신순 정렬)
+        
+        Returns:
+            숫자로 된 폴더명 리스트 (내림차순)
+        
+        Raises:
+            FileNotFoundError: 기본 경로가 존재하지 않는 경우
         """
         if not self.base_path.exists():
             raise FileNotFoundError(f"Base path {self.base_path} does not exist.")
         
-        report_ids = [d.name for d in self.base_path.iterdir() if d.is_dir() and d.name.isdigit()]
-        # Sort by post_id descending (largest first)
+        report_ids = [
+            d.name for d in self.base_path.iterdir() 
+            if d.is_dir() and d.name.isdigit()
+        ]
         return sorted(report_ids, key=lambda x: int(x), reverse=True)
-
-    def load_report(self, report_id: str) -> Dict[str, Union[str, List[str]]]:
-        """
-        Load text and image paths for a specific report ID.
+    
+    def load_report(self, report_id: str) -> ReportData:
+        """특정 보고서 로드
         
         Args:
-            report_id: The ID of the report to load.
+            report_id: 보고서 ID (폴더명)
             
         Returns:
-            A dictionary containing:
-            - 'id': report_id
-            - 'text': content of the .txt file
-            - 'images': list of absolute paths to image files
-            - 'pdf': path to pdf file (if exists)
-            - 'pptx': path to pptx file (if exists)
+            ReportData 객체
+            
+        Raises:
+            FileNotFoundError: 보고서 폴더가 존재하지 않는 경우
         """
         report_dir = self.base_path / report_id
         if not report_dir.exists():
             raise FileNotFoundError(f"Report directory {report_dir} does not exist.")
-
-        result = {
-            'id': report_id,
-            'text': "",
-            'images': [],
-            'pdf': None,
-            'pptx': None
-        }
-
-        # Load text content
+        
+        # 텍스트 로드
+        text = self._load_text(report_dir, report_id)
+        
+        # 이미지 로드 (정렬됨)
+        images = self._load_images(report_dir)
+        
+        # PDF/PPTX 경로 확인
+        pdf = self._find_file(report_dir, "*.pdf")
+        pptx = self._find_file(report_dir, "*.pptx")
+        
+        return ReportData(
+            id=report_id,
+            text=text,
+            images=images,
+            pdf=pdf,
+            pptx=pptx,
+        )
+    
+    def _load_text(self, report_dir: Path, report_id: str) -> str:
+        """텍스트 파일 로드"""
         txt_file = report_dir / f"{report_id}.txt"
-        if txt_file.exists():
-            try:
-                with open(txt_file, 'r', encoding='utf-8') as f:
-                    result['text'] = f.read()
-            except Exception as e:
-                print(f"Error reading text file {txt_file}: {e}")
+        if not txt_file.exists():
+            return ""
+        
+        try:
+            return txt_file.read_text(encoding='utf-8')
+        except Exception as e:
+            logger.error(f"Error reading text file {txt_file}: {e}")
+            return ""
+    
+    def _load_images(self, report_dir: Path) -> List[str]:
+        """이미지 파일 경로들 로드 (정렬됨)"""
+        images = sorted(report_dir.glob("*.png"))
+        return [str(img.absolute()) for img in images]
+    
+    def _find_file(self, report_dir: Path, pattern: str) -> Optional[str]:
+        """특정 패턴의 파일 찾기"""
+        files = list(report_dir.glob(pattern))
+        return str(files[0].absolute()) if files else None
 
-        # Load images
-        # Sorting images to maintain order (image_1.png, image_2.png, etc.)
-        images = sorted(list(report_dir.glob("*.png")))
-        result['images'] = [str(img.absolute()) for img in images]
-
-        # Check for PDF and PPTX
-        pdfs = list(report_dir.glob("*.pdf"))
-        if pdfs:
-            result['pdf'] = str(pdfs[0].absolute())
-            
-        pptxs = list(report_dir.glob("*.pptx"))
-        if pptxs:
-            result['pptx'] = str(pptxs[0].absolute())
-
-        return result
 
 if __name__ == "__main__":
-    # Simple test
-    loader = DataLoader("~/Projects/realEstateCrawler/output/")
-    report_ids = loader.get_report_ids()
-    print(f"Found {len(report_ids)} reports.")
+    # 테스트
+    import sys
     
-    if report_ids:
-        sample_id = "3635564" # Using the known sample
-        if sample_id in report_ids:
-            data = loader.load_report(sample_id)
-            print(f"Loaded report {sample_id}:")
-            print(f"Text length: {len(data['text'])}")
-            print(f"Image count: {len(data['images'])}")
-            print(f"Images: {data['images']}")
-        else:
-            print(f"Sample {sample_id} not found, loading first available: {report_ids[0]}")
+    loader = DataLoader("~/Projects/realEstateCrawler/output/")
+    
+    try:
+        report_ids = loader.get_report_ids()
+        print(f"Found {len(report_ids)} reports.")
+        
+        if report_ids:
             data = loader.load_report(report_ids[0])
-            print(data)
+            print(f"Loaded report {data.id}:")
+            print(f"  - Text length: {len(data.text)}")
+            print(f"  - Image count: {len(data.images)}")
+            print(f"  - Is empty: {data.is_empty}")
+    except FileNotFoundError as e:
+        print(f"Error: {e}")
+        sys.exit(1)

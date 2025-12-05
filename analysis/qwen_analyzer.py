@@ -1,98 +1,126 @@
-import os
-import json
+"""
+Qwen VL Analyzer
+
+vLLM 서버 기반 Qwen Vision-Language 모델 분석기
+"""
+import logging
 from typing import List, Dict, Any, Optional
+
 from openai import OpenAI
 from langchain_core.prompts import ChatPromptTemplate
 
+logger = logging.getLogger(__name__)
+
+
 class QwenAnalyzer:
+    """vLLM 기반 Qwen VL 분석기
+    
+    OpenAI 호환 API를 사용하여 멀티모달 분석 수행
+    
+    Example:
+        >>> analyzer = QwenAnalyzer(model_name="Qwen/Qwen3-VL-30B-A3B-Instruct")
+        >>> result = analyzer.analyze(text, images, prompt)
+    """
+    
+    DEFAULT_MODEL = "Qwen/Qwen3-VL-30B-A3B-Instruct"
+    DEFAULT_TEMPERATURE = 0.1
+    DEFAULT_MAX_TOKENS = 4096
+    
     def __init__(self, 
                  api_key: str = "EMPTY", 
                  base_url: str = "http://localhost:8000/v1",
-                 model_name: Optional[str] = None):
+                 model_name: Optional[str] = None,
+                 temperature: float = DEFAULT_TEMPERATURE,
+                 max_tokens: int = DEFAULT_MAX_TOKENS):
         """
-        Initialize the QwenAnalyzer with OpenAI-compatible vLLM client.
+        Args:
+            api_key: vLLM 서버 API 키 (기본: EMPTY)
+            base_url: vLLM 서버 URL
+            model_name: 모델명 (None이면 환경변수 또는 기본값 사용)
+            temperature: 생성 온도 (낮을수록 결정적)
+            max_tokens: 최대 출력 토큰
+        """
+        self.client = OpenAI(api_key=api_key, base_url=base_url)
+        self.model_name = model_name or self._get_model_name()
+        self.temperature = temperature
+        self.max_tokens = max_tokens
+        
+        logger.info(f"Initialized QwenAnalyzer with model: {self.model_name}")
+    
+    def _get_model_name(self) -> str:
+        """환경변수 또는 기본값에서 모델명 가져오기"""
+        import os
+        return os.environ.get("MODEL_NAME", self.DEFAULT_MODEL)
+    
+    def analyze(self, 
+                text: str, 
+                images: List[str], 
+                prompt_template: ChatPromptTemplate, 
+                **kwargs) -> str:
+        """멀티모달 분석 수행
         
         Args:
-            api_key: API key for vLLM server
-            base_url: vLLM server URL
-            model_name: Model name (if None, loads from config)
-        """
-        self.client = OpenAI(
-            api_key=api_key,
-            base_url=base_url,
-        )
-        
-        # 모델명: 파라미터 > 환경변수 > 기본값
-        if model_name:
-            self.model_name = model_name
-        else:
-            self.model_name = os.environ.get(
-                "MODEL_NAME", 
-                "Qwen/Qwen3-VL-30B-A3B-Instruct"
-            ) 
-
-    def analyze(self, text: str, images: List[str], prompt_template: ChatPromptTemplate, **kwargs) -> str:
-        """
-        Perform analysis using the Qwen model.
-        
-        Args:
-            text: The text content of the report.
-            images: List of image paths.
-            prompt_template: LangChain ChatPromptTemplate to use.
-            **kwargs: Additional arguments for the prompt template (e.g., complex_name).
+            text: 보고서 텍스트
+            images: 이미지 경로 리스트
+            prompt_template: LangChain ChatPromptTemplate
+            **kwargs: 프롬프트 템플릿 변수들
             
         Returns:
-            The analysis result as a string.
+            분석 결과 문자열
         """
-        # Format the prompt using LangChain
-        # We need to handle the image part separately because LangChain's standard formatting 
-        # might not directly map to OpenAI's multi-modal format for local images easily without some work.
-        # So we'll extract the text prompt from LangChain and construct the OpenAI message manually.
+        messages = self._build_messages(text, images, prompt_template, **kwargs)
         
-        # 1. Format the text part of the prompt
-        formatted_messages = prompt_template.format_messages(report_text=text, **kwargs)
-        system_content = formatted_messages[0].content
-        user_content_text = formatted_messages[1].content
-
-        # 2. Construct OpenAI messages
-        messages = [
-            {"role": "system", "content": system_content},
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": user_content_text},
-                ],
-            },
-        ]
-
-        # 3. Add images to the user message
-        # vLLM supports passing local file paths directly if configured, 
-        # or we can pass base64. For simplicity and performance with vLLM, 
-        # we'll try passing file URIs if the server supports it (which Qwen3-VL vLLM usually does).
-        # If not, we might need to convert to base64. 
-        # For this implementation, we'll use the file URI format: "file:///path/to/image.png"
-        
-        for img_path in images:
-            messages[1]["content"].append({
-                "type": "image_url",
-                "image_url": {
-                    "url": f"file://{img_path}"
-                }
-            })
-
-        # 4. Call the API
         try:
             completion = self.client.chat.completions.create(
                 model=self.model_name,
                 messages=messages,
-                temperature=0.1, # Low temperature for factual extraction
-                max_tokens=4096,
+                temperature=self.temperature,
+                max_tokens=self.max_tokens,
             )
             return completion.choices[0].message.content
         except Exception as e:
+            logger.error(f"Analysis error: {e}")
             return f"Error during analysis: {e}"
+    
+    def _build_messages(self,
+                        text: str,
+                        images: List[str],
+                        prompt_template: ChatPromptTemplate,
+                        **kwargs) -> List[Dict[str, Any]]:
+        """OpenAI 호환 메시지 구성"""
+        # LangChain 템플릿 포맷팅
+        formatted = prompt_template.format_messages(report_text=text, **kwargs)
+        
+        system_content = formatted[0].content
+        user_content_text = formatted[1].content if len(formatted) > 1 else ""
+        
+        # 메시지 구성
+        messages = [
+            {"role": "system", "content": system_content},
+            {
+                "role": "user",
+                "content": self._build_user_content(user_content_text, images),
+            },
+        ]
+        
+        return messages
+    
+    def _build_user_content(self, 
+                            text: str, 
+                            images: List[str]) -> List[Dict[str, Any]]:
+        """사용자 메시지 콘텐츠 구성 (텍스트 + 이미지)"""
+        content = [{"type": "text", "text": text}]
+        
+        for img_path in images:
+            content.append({
+                "type": "image_url",
+                "image_url": {"url": f"file://{img_path}"}
+            })
+        
+        return content
+
 
 if __name__ == "__main__":
-    # Test the analyzer (requires running vLLM server)
+    # 테스트
     analyzer = QwenAnalyzer()
     print(f"Initialized analyzer for model: {analyzer.model_name}")

@@ -3,25 +3,32 @@ Prompt Manager - 호환성 래퍼
 
 기존 인터페이스를 유지하면서 새로운 엔터프라이즈급 프롬프트 관리 시스템으로 위임
 """
-import yaml
+import logging
 from pathlib import Path
-from langchain_core.prompts import ChatPromptTemplate
 from typing import List, Dict, Optional
 
-# 새로운 프롬프트 관리 시스템
+import yaml
+from langchain_core.prompts import ChatPromptTemplate
+
 from prompts.manager import PromptManager as CorePromptManager
-from prompts.loaders import PromptLoader
+
+logger = logging.getLogger(__name__)
 
 
 class PromptManager:
     """호환성 래퍼 - 기존 인터페이스 유지
     
-    기존 main_analysis.py와의 호환성을 위해 동일한 메서드 시그니처 제공
+    기존 main_analysis.py와의 호환성을 위해 동일한 메서드 시그니처 제공.
+    내부적으로 새로운 CorePromptManager에 위임.
     """
     
-    def __init__(self, config_path: str = "analysis/config.yaml"):
-        self.config_path = Path(config_path)
-        self.config = self._load_config()
+    def __init__(self, config_path: Optional[str] = None):
+        """
+        Args:
+            config_path: 설정 파일 경로 (None이면 자동 탐색)
+        """
+        self.config_path = self._resolve_config_path(config_path)
+        self._config = None  # Lazy loading
         
         # 새로운 코어 매니저 초기화
         templates_dir = self._get_templates_dir()
@@ -30,97 +37,86 @@ class PromptManager:
             environment="prod",
         )
         
-        # 시스템 프롬프트 로드 (폴백용)
-        self._system_prompt = self._load_system_prompt()
+        logger.debug(f"Initialized PromptManager with templates: {templates_dir}")
+    
+    @property
+    def config(self) -> Dict:
+        """설정 지연 로딩"""
+        if self._config is None:
+            self._config = self._load_config()
+        return self._config
+    
+    def _resolve_config_path(self, config_path: Optional[str]) -> Path:
+        """설정 파일 경로 결정"""
+        candidates = [
+            Path(config_path) if config_path else None,
+            Path("analysis/config.yaml"),
+            Path(__file__).parent / "config.yaml",
+        ]
+        
+        for path in candidates:
+            if path and path.exists():
+                return path
+        
+        raise FileNotFoundError("Config file not found")
     
     def _load_config(self) -> Dict:
-        if not self.config_path.exists():
-            # Fallback to looking relative to this file if run from elsewhere
-            current_file_path = Path(__file__).parent
-            potential_path = current_file_path / "config.yaml"
-            if potential_path.exists():
-                self.config_path = potential_path
-            else:
-                raise FileNotFoundError(f"Config file not found at {self.config_path} or {potential_path}")
-        
+        """설정 파일 로드"""
         with open(self.config_path, 'r', encoding='utf-8') as f:
             return yaml.safe_load(f)
     
     def _get_templates_dir(self) -> Path:
         """템플릿 디렉토리 경로 결정"""
-        # config.yaml에서 설정된 경로 사용
-        prompts_config = self.config.get('prompts', {})
-        templates_dir = prompts_config.get('templates_dir', 'analysis/prompts/templates')
-        
-        path = Path(templates_dir)
-        if not path.is_absolute():
-            # 상대 경로인 경우 config 파일 기준으로 해석
-            path = self.config_path.parent / "prompts" / "templates"
-        
-        return path
+        return self.config_path.parent / "prompts" / "templates"
     
-    def _load_system_prompt(self) -> str:
-        """시스템 프롬프트 로드"""
-        # 새로운 시스템에서 로드 시도
-        system_prompt_path = self._get_templates_dir() / "base_system.yaml"
-        if system_prompt_path.exists():
-            with open(system_prompt_path, 'r', encoding='utf-8') as f:
-                data = yaml.safe_load(f)
-                return data.get('content', '')
-        
-        # 폴백: 기존 config.yaml에서 로드
-        return self.config.get('prompts', {}).get('system_prompt', '')
-
+    def _get_system_prompt(self) -> str:
+        """시스템 프롬프트 로드 (폴백용)"""
+        # 레거시 config에서 로드
+        legacy = self.config.get('legacy_prompts', {})
+        return legacy.get('system_prompt', '')
+    
+    # ==================== 기존 인터페이스 ====================
+    
     def get_fact_extraction_prompt(self) -> ChatPromptTemplate:
-        """Returns a prompt for extracting factual data from the report."""
-        try:
-            return self._core.get_prompt("fact_extraction")
-        except FileNotFoundError:
-            # 폴백: 기존 config.yaml에서 로드
-            template = self.config['prompts']['fact_extraction']
-            return ChatPromptTemplate.from_messages([
-                ("system", self._system_prompt),
-                ("user", template)
-            ])
-
+        """팩트 추출 프롬프트"""
+        return self._get_prompt_with_fallback("fact_extraction")
+    
     def get_visual_verification_prompt(self) -> ChatPromptTemplate:
-        """Returns a prompt for verifying text claims against visual data."""
-        try:
-            return self._core.get_prompt("visual_verification")
-        except FileNotFoundError:
-            template = self.config['prompts']['visual_verification']
-            return ChatPromptTemplate.from_messages([
-                ("system", self._system_prompt),
-                ("user", template)
-            ])
-
+        """시각적 검증 프롬프트"""
+        return self._get_prompt_with_fallback("visual_verification")
+    
     def get_sentiment_analysis_prompt(self) -> ChatPromptTemplate:
-        """Returns a prompt for analyzing sentiment and hidden risks."""
-        try:
-            return self._core.get_prompt("sentiment_analysis")
-        except FileNotFoundError:
-            template = self.config['prompts']['sentiment_analysis']
-            return ChatPromptTemplate.from_messages([
-                ("system", self._system_prompt),
-                ("user", template)
-            ])
-
+        """감성 분석 프롬프트"""
+        return self._get_prompt_with_fallback("sentiment_analysis")
+    
     def get_insight_generation_prompt(self) -> ChatPromptTemplate:
-        """Returns a prompt for generating final investment insights."""
+        """인사이트 생성 프롬프트"""
+        return self._get_prompt_with_fallback("insight_generation")
+    
+    def _get_prompt_with_fallback(self, name: str) -> ChatPromptTemplate:
+        """새 시스템에서 로드 시도, 실패 시 레거시 폴백"""
         try:
-            return self._core.get_prompt("insight_generation")
+            return self._core.get_prompt(name)
         except FileNotFoundError:
-            template = self.config['prompts']['insight_generation']
-            return ChatPromptTemplate.from_messages([
-                ("system", self._system_prompt),
-                ("user", template)
-            ])
-
-    # ==================== 새로운 엔터프라이즈 기능 노출 ====================
+            logger.warning(f"Prompt '{name}' not found, using legacy fallback")
+            return self._build_legacy_prompt(name)
+    
+    def _build_legacy_prompt(self, name: str) -> ChatPromptTemplate:
+        """레거시 설정에서 프롬프트 빌드"""
+        legacy = self.config.get('legacy_prompts', {})
+        template = legacy.get(name, "")
+        system_prompt = self._get_system_prompt()
+        
+        return ChatPromptTemplate.from_messages([
+            ("system", system_prompt),
+            ("user", template),
+        ])
+    
+    # ==================== 새로운 인터페이스 노출 ====================
     
     @property
     def core(self) -> CorePromptManager:
-        """새로운 코어 프롬프트 매니저 접근"""
+        """코어 프롬프트 매니저 접근"""
         return self._core
     
     def get_prompt(self, name: str, version: str = "latest") -> ChatPromptTemplate:
@@ -132,31 +128,28 @@ class PromptManager:
         return self._core.list_prompts()
     
     def with_few_shot(self, name: str, examples: List[Dict[str, str]]) -> ChatPromptTemplate:
-        """Few-shot 예시가 적용된 프롬프트"""
+        """Few-shot 예시 적용"""
         return self._core.with_few_shot(name, examples)
     
     def with_history(self, name: str, history_variable: str = "chat_history") -> ChatPromptTemplate:
-        """대화 기록 슬롯이 추가된 프롬프트"""
+        """대화 기록 슬롯 추가"""
         return self._core.with_history(name, history_variable)
 
 
 if __name__ == "__main__":
-    # Test the prompt manager
+    # 테스트
+    logging.basicConfig(level=logging.DEBUG)
+    
     try:
         pm = PromptManager()
         
         print("=== 호환성 테스트 ===")
-        print("Fact Extraction Prompt:")
         prompt = pm.get_fact_extraction_prompt()
         result = prompt.format(report_text="샘플 텍스트")
-        print(f"  - Format 성공: {len(result)} chars")
+        print(f"Format 성공: {len(result)} chars")
         
-        print("\n=== 새로운 기능 테스트 ===")
-        print("등록된 프롬프트:", pm.list_prompts())
-        
-        print("\n새 방식 로드:")
-        prompt2 = pm.get_prompt("fact_extraction")
-        print(f"  - 로드 성공: {type(prompt2).__name__}")
+        print("\n=== 등록된 프롬프트 ===")
+        print(pm.list_prompts())
         
     except Exception as e:
         import traceback
