@@ -49,9 +49,14 @@ services:
       - GPU_MEMORY_UTILIZATION=0.90
       - MAX_MODEL_LEN=32768
       - TRUST_REMOTE_CODE=true
-      # HuggingFace token (optional, for gated models)
-      # - HF_TOKEN=${HF_TOKEN}
 
+      # HuggingFace token (for gated models)
+      - HF_TOKEN=${HF_TOKEN:-}
+
+      # LangSmith configuration (optional - for prompt management)
+      - LANGSMITH_API_KEY=${LANGSMITH_API_KEY:-}
+      - LANGSMITH_TRACING=${LANGSMITH_TRACING:-false}
+      - LANGSMITH_PROJECT=${LANGSMITH_PROJECT:-realEstateAnalyzer}
       # Volume mounts
     volumes:
       # Model cache persistence (Use host cache to avoid re-download)
