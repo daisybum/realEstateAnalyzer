@@ -2,9 +2,11 @@
 Qwen VL Analyzer
 
 vLLM 서버 기반 Qwen Vision-Language 모델 분석기
+청크 기반 대용량 이미지 처리 지원
 """
+import json
 import logging
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 
 from openai import OpenAI
 from langchain_core.prompts import ChatPromptTemplate
@@ -16,6 +18,7 @@ class QwenAnalyzer:
     """vLLM 기반 Qwen VL 분석기
     
     OpenAI 호환 API를 사용하여 멀티모달 분석 수행
+    대용량 이미지는 청크 단위로 분할 처리 후 결과 병합
     
     Example:
         >>> analyzer = QwenAnalyzer(model_name="Qwen/Qwen3-VL-30B-A3B-Instruct")
@@ -25,7 +28,7 @@ class QwenAnalyzer:
     DEFAULT_MODEL = "Qwen/Qwen3-VL-30B-A3B-Instruct"
     DEFAULT_TEMPERATURE = 0.1
     DEFAULT_MAX_TOKENS = 8192
-    MAX_IMAGES = 15  # 32768 토큰 제한에 맞춤 (이미지당 ~2000토큰)
+    MAX_IMAGES_PER_CHUNK = 12  # 32768 토큰 제한에 맞춤 (이미지당 ~2000토큰 + 프롬프트 여유)
     
     def __init__(self, 
                  api_key: str = "EMPTY", 
@@ -33,7 +36,7 @@ class QwenAnalyzer:
                  model_name: Optional[str] = None,
                  temperature: float = DEFAULT_TEMPERATURE,
                  max_tokens: int = DEFAULT_MAX_TOKENS,
-                 max_images: int = MAX_IMAGES):
+                 max_images_per_chunk: int = MAX_IMAGES_PER_CHUNK):
         """
         Args:
             api_key: vLLM 서버 API 키 (기본: EMPTY)
@@ -41,13 +44,13 @@ class QwenAnalyzer:
             model_name: 모델명 (None이면 환경변수 또는 기본값 사용)
             temperature: 생성 온도 (낮을수록 결정적)
             max_tokens: 최대 출력 토큰
-            max_images: 최대 이미지 개수 (토큰 제한 방지)
+            max_images_per_chunk: 청크당 최대 이미지 개수
         """
         self.client = OpenAI(api_key=api_key, base_url=base_url)
         self.model_name = model_name or self._get_model_name()
         self.temperature = temperature
         self.max_tokens = max_tokens
-        self.max_images = max_images
+        self.max_images_per_chunk = max_images_per_chunk
         
         logger.info(f"Initialized QwenAnalyzer with model: {self.model_name}")
     
@@ -61,7 +64,7 @@ class QwenAnalyzer:
                 images: List[str], 
                 prompt_template: ChatPromptTemplate, 
                 **kwargs) -> str:
-        """멀티모달 분석 수행
+        """멀티모달 분석 수행 (청크 처리 포함)
         
         Args:
             text: 보고서 텍스트
@@ -70,8 +73,26 @@ class QwenAnalyzer:
             **kwargs: 프롬프트 템플릿 변수들
             
         Returns:
-            분석 결과 문자열
+            분석 결과 문자열 (청크 결과 병합)
         """
+        # 이미지가 청크 제한 이하면 단일 처리
+        if len(images) <= self.max_images_per_chunk:
+            return self._analyze_single(text, images, prompt_template, **kwargs)
+        
+        # 청크 분할 처리
+        logger.info(f"Chunked processing: {len(images)} images in {self._calculate_chunks(len(images))} chunks")
+        return self._analyze_chunked(text, images, prompt_template, **kwargs)
+    
+    def _calculate_chunks(self, total_images: int) -> int:
+        """필요한 청크 수 계산"""
+        return (total_images + self.max_images_per_chunk - 1) // self.max_images_per_chunk
+    
+    def _analyze_single(self,
+                        text: str,
+                        images: List[str],
+                        prompt_template: ChatPromptTemplate,
+                        **kwargs) -> str:
+        """단일 청크 분석"""
         messages = self._build_messages(text, images, prompt_template, **kwargs)
         
         try:
@@ -85,6 +106,138 @@ class QwenAnalyzer:
         except Exception as e:
             logger.error(f"Analysis error: {e}")
             return f"Error during analysis: {e}"
+    
+    def _analyze_chunked(self,
+                         text: str,
+                         images: List[str],
+                         prompt_template: ChatPromptTemplate,
+                         **kwargs) -> str:
+        """청크 분할 분석 + 결과 병합
+        
+        Phase 1: 각 청크 개별 분석
+        Phase 2: 결과 병합 (JSON 병합 또는 텍스트 연결)
+        """
+        # 이미지 청크 분할
+        chunks = self._split_into_chunks(images)
+        total_chunks = len(chunks)
+        chunk_results = []
+        
+        for i, chunk in enumerate(chunks, 1):
+            logger.info(f"  Processing chunk {i}/{total_chunks} ({len(chunk)} images)...")
+            
+            # 청크 컨텍스트 추가
+            chunk_context = f"\n[Analyzing chunk {i}/{total_chunks}, images {(i-1)*self.max_images_per_chunk + 1}-{(i-1)*self.max_images_per_chunk + len(chunk)}]\n"
+            chunk_text = text + chunk_context
+            
+            result = self._analyze_single(chunk_text, chunk, prompt_template, **kwargs)
+            chunk_results.append({
+                "chunk_id": i,
+                "image_count": len(chunk),
+                "result": result
+            })
+        
+        # 결과 병합
+        return self._merge_chunk_results(chunk_results)
+    
+    def _split_into_chunks(self, images: List[str]) -> List[List[str]]:
+        """이미지 리스트를 청크로 분할"""
+        chunks = []
+        for i in range(0, len(images), self.max_images_per_chunk):
+            chunks.append(images[i:i + self.max_images_per_chunk])
+        return chunks
+    
+    def _merge_chunk_results(self, chunk_results: List[Dict]) -> str:
+        """청크 결과 병합
+        
+        JSON 결과: 필드별 병합
+        텍스트 결과: 연결
+        """
+        if not chunk_results:
+            return "{}"
+        
+        # 단일 청크면 그대로 반환
+        if len(chunk_results) == 1:
+            return chunk_results[0]["result"]
+        
+        # JSON 병합 시도
+        merged_json = self._try_merge_json_results(chunk_results)
+        if merged_json:
+            return merged_json
+        
+        # JSON 파싱 실패 시 텍스트 연결
+        return self._merge_text_results(chunk_results)
+    
+    def _try_merge_json_results(self, chunk_results: List[Dict]) -> Optional[str]:
+        """JSON 결과 병합 시도"""
+        try:
+            parsed_results = []
+            for cr in chunk_results:
+                result_str = cr["result"]
+                # JSON 블록 추출
+                clean = result_str.replace("```json", "").replace("```", "").strip()
+                parsed = json.loads(clean)
+                parsed_results.append(parsed)
+            
+            # 결과 병합
+            merged = self._deep_merge_dicts(parsed_results)
+            merged["_chunk_info"] = {
+                "total_chunks": len(chunk_results),
+                "merged": True
+            }
+            
+            return json.dumps(merged, ensure_ascii=False, indent=2)
+        except (json.JSONDecodeError, KeyError, TypeError) as e:
+            logger.debug(f"JSON merge failed: {e}")
+            return None
+    
+    def _deep_merge_dicts(self, dicts: List[Dict]) -> Dict:
+        """딕셔너리 리스트 깊은 병합
+        
+        - 리스트: 중복 제거 후 연결
+        - 딕셔너리: 재귀 병합
+        - 스칼라: 마지막 값 우선 (null이 아닌 값 우선)
+        """
+        if not dicts:
+            return {}
+        
+        result = {}
+        all_keys = set()
+        for d in dicts:
+            if isinstance(d, dict):
+                all_keys.update(d.keys())
+        
+        for key in all_keys:
+            values = [d.get(key) for d in dicts if isinstance(d, dict) and key in d]
+            values = [v for v in values if v is not None]
+            
+            if not values:
+                result[key] = None
+            elif all(isinstance(v, dict) for v in values):
+                # 딕셔너리 재귀 병합
+                result[key] = self._deep_merge_dicts(values)
+            elif all(isinstance(v, list) for v in values):
+                # 리스트 병합 (중복 제거)
+                merged_list = []
+                seen = set()
+                for lst in values:
+                    for item in lst:
+                        item_key = json.dumps(item, sort_keys=True) if isinstance(item, dict) else str(item)
+                        if item_key not in seen:
+                            seen.add(item_key)
+                            merged_list.append(item)
+                result[key] = merged_list
+            else:
+                # 스칼라: null이 아닌 마지막 값
+                result[key] = values[-1]
+        
+        return result
+    
+    def _merge_text_results(self, chunk_results: List[Dict]) -> str:
+        """텍스트 결과 연결"""
+        parts = []
+        for cr in chunk_results:
+            parts.append(f"=== Chunk {cr['chunk_id']} ({cr['image_count']} images) ===\n{cr['result']}")
+        return "\n\n".join(parts)
     
     def _build_messages(self,
                         text: str,
@@ -115,14 +268,6 @@ class QwenAnalyzer:
         """사용자 메시지 콘텐츠 구성 (텍스트 + 이미지)"""
         content = [{"type": "text", "text": text}]
         
-        # 이미지 개수 제한 (토큰 오버플로우 방지)
-        if len(images) > self.max_images:
-            logger.warning(
-                f"Truncating images: {len(images)} -> {self.max_images} "
-                f"(max_images limit)"
-            )
-            images = images[:self.max_images]
-        
         for img_path in images:
             content.append({
                 "type": "image_url",
@@ -136,3 +281,4 @@ if __name__ == "__main__":
     # 테스트
     analyzer = QwenAnalyzer()
     print(f"Initialized analyzer for model: {analyzer.model_name}")
+    print(f"Max images per chunk: {analyzer.max_images_per_chunk}")
