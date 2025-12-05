@@ -5,3 +5,4 @@ __pycache__/
 .vscode/
 .idea/
 analysis_results/
+temp_images/

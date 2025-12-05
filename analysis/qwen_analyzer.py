@@ -314,10 +314,45 @@ class QwenAnalyzer:
                             merged_list.append(item)
                 result[key] = merged_list
             else:
-                # 스칼라: null이 아닌 마지막 값
-                result[key] = values[-1]
+                # 스칼라: 충돌 감지 후 최빈값 선택
+                result[key] = self._resolve_scalar_conflict(key, values)
         
         return result
+    
+    def _resolve_scalar_conflict(self, key: str, values: List) -> Any:
+        """스칼라 값 충돌 해결 - 최빈값 선택"""
+        if len(values) == 1:
+            return values[0]
+        
+        # 숫자 필드 충돌 감지
+        numeric_values = [v for v in values if isinstance(v, (int, float))]
+        if len(numeric_values) > 1:
+            min_val = min(numeric_values)
+            max_val = max(numeric_values)
+            
+            # 50% 이상 차이면 경고
+            if min_val > 0 and (max_val - min_val) / min_val > 0.5:
+                logger.warning(f"Data conflict in '{key}': values differ >50% ({values})")
+        
+        # 최빈값 선택 (Counter 사용)
+        from collections import Counter
+        
+        # 해시 가능한 값만 사용
+        hashable_values = []
+        for v in values:
+            try:
+                hash(v)
+                hashable_values.append(v)
+            except TypeError:
+                hashable_values.append(str(v))
+        
+        if hashable_values:
+            counter = Counter(hashable_values)
+            most_common = counter.most_common(1)[0][0]
+            return most_common
+        
+        # 기본: 마지막 값
+        return values[-1]
     
     def _merge_text_results(self, chunk_results: List[Dict]) -> str:
         """텍스트 결과 연결"""

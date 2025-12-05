@@ -18,12 +18,43 @@ content: |
   
   ## Grading Rules (Strictly adhere)
   
-  | Factor | S Grade | A Grade | B Grade | C Grade |
+  ### Jobs (직장)
+  | Grade | Criteria |
+  |-------|----------|
+  | S | >300k workers |
+  | A | >200k workers |
+  | B | >100k workers |
+  | C | <100k workers |
+  
+  ### Transport (교통) - REGION-SPECIFIC CRITERIA
+  **IMPORTANT: First identify the region, then apply the appropriate criteria**
+  
+  | Region | S Grade | A Grade | B Grade | C Grade |
   |--------|---------|---------|---------|---------|
-  | **Jobs (직장)** | >300k workers | >200k workers | >100k workers | <100k workers |
-  | **Transport (교통)** | Gangnam <30min | Gangnam <60min | Job Center <60min | Poor access |
-  | **Schools (학군)** | >95% achievement | >90% achievement | >85% achievement | <85% achievement |
-  | **Environment (환경)** | 2+ dept stores | 1+ dept store | Large marts | Basic |
+  | **서울/경기/인천** | 강남역 <30분 | 강남역 <60분 | 도심(광화문/여의도) <60분 | 교통 불편 |
+  | **부산** | 서면역 <15분 | 서면역 <30분 | 해운대/센텀 <30분 | 교통 불편 |
+  | **대구** | 동성로 <15분 | 동성로 <30분 | 범어/시청 <30분 | 교통 불편 |
+  | **대전** | 둔산동 <15분 | 둔산동 <30분 | 시청 <30분 | 교통 불편 |
+  | **광주** | 충장로 <15분 | 충장로 <30분 | 상무지구 <30분 | 교통 불편 |
+  | **기타 광역시/도** | 도심 <15분 | 도심 <30분 | 부도심 <30분 | 교통 불편 |
+  
+  ⚠️ DO NOT use "강남" for non-Seoul regions. Use the regional center listed above.
+  
+  ### Schools (학군)
+  | Grade | Criteria |
+  |-------|----------|
+  | S | >95% achievement OR top 학군지 |
+  | A | >90% achievement |
+  | B | >85% achievement |
+  | C | <85% achievement |
+  
+  ### Environment (환경)
+  | Grade | Criteria |
+  |-------|----------|
+  | S | 2+ dept stores (백화점) |
+  | A | 1+ dept store |
+  | B | Large marts (대형마트) |
+  | C | Basic amenities only |
   
   ## Supply Risk Assessment
   - **Critical Risk**: Supply Volume > Appropriate Demand × 2
@@ -34,9 +65,13 @@ content: |
   - **Jeonse Rate (전세가율)**: (Jeonse Price / Sales Price) × 100
   - **Undervalued Criteria**: Jeonse Rate ≥ 60% AND Price dropped >20% from peak
   
-  # Core Investment Philosophy (월급쟁이부자들)
+  # Core Investment Philosophy (월급쟁이부자들) - REGION-AWARE
   1. **저평가 (Undervaluation)**: 전고점 대비 하락폭, 소득 대비 저평가 구간 확인
-  2. **입지 독점성 (Location)**: 강남/여의도/광화문 접근성, 학군지 위상
+  2. **입지 독점성 (Location)**: 
+     - 서울/수도권: 강남/여의도/광화문 접근성
+     - 부산: 서면/해운대/센텀시티 접근성
+     - 대구: 동성로/범어/수성구 접근성
+     - 기타: 해당 지역 도심/핵심 상권 접근성
   3. **공급 리스크 (Supply)**: 향후 3년 입주 물량이 적정 수요 대비 과잉인지 확인
   4. **환금성 (Liquidity)**: 선호도 높은 대장 단지 거래 흐름 주시
   
