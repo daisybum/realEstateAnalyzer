@@ -21,40 +21,31 @@ data_dir/
     ├── ...
 ```
 
-### 처리 로직 (Processing Logic)
-1.  **Aggregation (`data_loader.py`)**:
-    *   `DataLoader.load_report(report_id)`가 호출되면 해당 폴더를 스캔합니다.
-    *   `.txt` 파일은 읽어서 문자열로 변환합니다.
-    *   `.png` 파일들은 알파벳 순으로 정렬하여 리스트로 저장합니다.
-    *   `.pdf`, `.pptx` 파일이 존재하면 해당 경로를 저장합니다.
-    *   이 모든 데이터는 하나의 Dictionary (`data`)로 묶여서 리턴됩니다.
-
-2.  **Analysis (`main_analysis.py`)**:
-    *   `main()` 함수는 `DataLoader`가 리턴한 `data` 딕셔너리를 받습니다.
-    *   `data['text']`와 `data['images']`를 `QwenAnalyzer`에 전달하여 멀티모달 분석을 수행합니다.
-    *   (확장 가능성) 현재는 텍스트와 이미지를 주로 분석하지만, `data['pdf']`나 `data['pptx']` 경로가 확보되어 있으므로 향후 파서(Parser)를 추가하여 내용을 추출하고 분석에 포함시킬 수 있는 구조입니다.
-
 ---
 
 ## 🏗️ 2. 코드 구조 (Code Structure)
 
-코드는 모듈화되어 있으며, 각 파일은 명확한 역할을 가집니다.
-
 ```
 analysis/
-├── main_analysis.py    # Entry Point - 파이프라인 조율
-├── config_loader.py    # 공유 설정 (싱글톤 패턴)
-├── config.yaml         # 시스템 설정
-├── data_loader.py      # 데이터 로드 (파일 시스템)
-├── prompt_manager.py   # 호환성 래퍼
-├── qwen_analyzer.py    # vLLM API 클라이언트
-└── prompts/            # 엔터프라이즈 프롬프트 시스템
-    ├── manager.py      # 통합 인터페이스
-    ├── loaders.py      # YAML/JSON 직렬화
-    ├── templates.py    # Few-shot, History 지원
-    ├── registry.py     # 로컬 버전 관리
+├── main_analysis.py     # Entry Point - 파이프라인 조율
+├── config_loader.py     # 공유 설정 (싱글톤 패턴)
+├── config.yaml          # 시스템 설정
+├── secrets_manager.py   # 🆕 시크릿 관리 (AWS/GCP/dotenv)
+├── data_loader.py       # 데이터 로드 (파일 시스템)
+├── prompt_manager.py    # 호환성 래퍼
+├── qwen_analyzer.py     # vLLM API 클라이언트
+└── prompts/             # 엔터프라이즈 프롬프트 시스템
+    ├── manager.py       # 통합 인터페이스
+    ├── loaders.py       # YAML/JSON 직렬화
+    ├── templates.py     # Few-shot, History 지원
+    ├── registry.py      # 로컬 버전 관리
     ├── langsmith_hub.py # LangSmith 연동
-    └── templates/      # YAML 프롬프트 파일
+    └── templates/       # YAML 프롬프트 파일 (v2.0)
+        ├── base_system.yaml
+        ├── fact_extraction.yaml
+        ├── visual_verification.yaml
+        ├── sentiment_analysis.yaml
+        └── insight_generation.yaml
 ```
 
 ### 핵심 모듈
@@ -63,22 +54,89 @@ analysis/
 |------|------|
 | `main_analysis.py` | 전체 분석 파이프라인 조율 |
 | `config_loader.py` | 환경변수 > YAML > 기본값 우선순위 설정 관리 |
+| `secrets_manager.py` | 🆕 다중 백엔드 시크릿 관리 (AWS/GCP/dotenv) |
 | `data_loader.py` | 파일 시스템에서 보고서 데이터 로드 |
 | `qwen_analyzer.py` | vLLM API 통신 및 멀티모달 추론 |
-| `prompts/` | 엔터프라이즈급 프롬프트 관리 ([상세 문서](prompts/README.md)) |
+| `prompts/` | 온톨로지 기반 프롬프트 관리 ([상세 문서](prompts/README.md)) |
 
 ---
 
-## 🚀 사용 방법 (Usage)
+## 🔐 3. 시크릿 관리 (Secrets Management)
 
-### 기본 실행
-`config.yaml`에 설정된 기본 경로와 모델을 사용하여 분석을 수행합니다.
+`secrets_manager.py`는 다중 백엔드를 지원하는 엔터프라이즈급 시크릿 관리자입니다.
+
+### 지원 백엔드
+
+| 백엔드 | 설정 | 필요 패키지 |
+|--------|------|------------|
+| **환경변수** | 기본 (항상 최우선) | 없음 |
+| **AWS Secrets Manager** | `SecretBackend.AWS` | `boto3` |
+| **GCP Secret Manager** | `SecretBackend.GCP` | `google-cloud-secret-manager` |
+| **로컬 .env** | `SecretBackend.DOTENV` | 없음 |
+
+### 우선순위
+```
+1. 환경변수 (os.environ)
+2. 설정된 백엔드 (AWS/GCP/dotenv)
+3. 기본값
+```
+
+### 사용 예시
+```python
+from secrets_manager import get_secret, get_langsmith_config
+
+# 개별 시크릿 조회
+api_key = get_secret("LANGSMITH_API_KEY")
+
+# LangSmith 전체 설정 (API 키 없으면 자동 비활성화)
+config = get_langsmith_config()
+```
+
+---
+
+## 🤖 4. 프롬프트 시스템 v2.0
+
+온톨로지 기반의 부동산 투자 분석 프롬프트:
+
+| 템플릿 | 역할 |
+|--------|------|
+| `base_system.yaml` | 온톨로지 스키마, 등급 기준, 계산 공식 |
+| `fact_extraction.yaml` | JSON 구조화 엔티티 추출 |
+| `visual_verification.yaml` | 차트/지도 멀티모달 분석 |
+| `sentiment_analysis.yaml` | 시장 심리 분석 |
+| `insight_generation.yaml` | 최종 투자 인사이트 |
+
+### Wolbu 등급 체계
+
+| Factor | S | A | B | C |
+|--------|---|---|---|---|
+| 직장 | >30만명 | >20만명 | >10만명 | <10만명 |
+| 교통 | 강남 30분 | 강남 60분 | 도심 60분 | 열악 |
+| 학군 | >95% | >90% | >85% | <85% |
+
+---
+
+## 🚀 5. 사용 방법 (Usage)
+
+### 환경 설정
 ```bash
-python analysis/main_analysis.py
+# .env.example 복사
+cp .env.example .env
+
+# API 키 설정 (LangSmith는 선택사항)
+nano .env
+```
+
+### Docker 실행
+```bash
+cd docker/vllm-blackwell
+docker compose up -d
+
+# 분석 실행
+docker exec vllm-qwen3-vl-30b python3 /workspace/app/realEstateAnalyzer/analysis/main_analysis.py --report_id 3189054
 ```
 
 ### 옵션 지정
-특정 보고서만 분석하거나 설정을 오버라이드할 수 있습니다.
 ```bash
 # 특정 리포트 ID만 분석
 python analysis/main_analysis.py --report_id 3635564
@@ -86,6 +144,22 @@ python analysis/main_analysis.py --report_id 3635564
 # 데이터 경로 변경
 python analysis/main_analysis.py --data_dir /path/to/custom/data
 
-# 사용할 모델 변경
-python analysis/main_analysis.py --model Qwen/Qwen2.5-VL-72B-Instruct-AWQ
+# 최대 샘플 수 제한
+python analysis/main_analysis.py --max_samples 5
+```
+
+---
+
+## 📊 6. 출력 형식
+
+분석 결과는 `analysis_results/{report_id}_analysis.json`에 저장됩니다:
+
+```json
+{
+  "report_id": "3189054",
+  "facts": { /* JSON 구조화 엔티티 */ },
+  "verification": { /* 시각적 검증 결과 */ },
+  "sentiment": { /* 시장 심리 분석 */ },
+  "insight": "# 🏠️ **용인시 수지구** 지역 분석 보고서..."
+}
 ```
