@@ -40,33 +40,32 @@ data_dir/
 
 코드는 모듈화되어 있으며, 각 파일은 명확한 역할을 가집니다.
 
-### `main_analysis.py` (Entry Point)
-*   **역할**: 전체 분석 파이프라인을 조율(Orchestration)합니다.
-*   **주요 흐름**:
-    1.  설정 로드 (`config.yaml`)
-    2.  데이터 로드 (`DataLoader`)
-    3.  단계별 분석 수행 (Fact Extraction -> Visual Verification -> Sentiment -> Insight)
-    4.  결과 저장 (JSON)
+```
+analysis/
+├── main_analysis.py    # Entry Point - 파이프라인 조율
+├── config_loader.py    # 공유 설정 (싱글톤 패턴)
+├── config.yaml         # 시스템 설정
+├── data_loader.py      # 데이터 로드 (파일 시스템)
+├── prompt_manager.py   # 호환성 래퍼
+├── qwen_analyzer.py    # vLLM API 클라이언트
+└── prompts/            # 엔터프라이즈 프롬프트 시스템
+    ├── manager.py      # 통합 인터페이스
+    ├── loaders.py      # YAML/JSON 직렬화
+    ├── templates.py    # Few-shot, History 지원
+    ├── registry.py     # 로컬 버전 관리
+    ├── langsmith_hub.py # LangSmith 연동
+    └── templates/      # YAML 프롬프트 파일
+```
 
-### `data_loader.py` (Data Layer)
-*   **역할**: 파일 시스템과 상호작용하여 Raw 데이터를 로드합니다.
-*   **특징**:
-    *   폴더 기반의 데이터 구조를 파싱합니다.
-    *   이미지 파일의 순서를 보장하여 로드합니다.
-    *   다양한 파일 포맷(TXT, PNG, PDF, PPTX)을 하나의 객체로 추상화합니다.
+### 핵심 모듈
 
-### `config.yaml` (Configuration)
-*   **역할**: 시스템 설정과 프롬프트를 관리합니다.
-*   **내용**:
-    *   `system`: 데이터 경로, 모델 이름, API URL 등 환경 설정.
-    *   `prompts`: 각 분석 단계(Fact, Verification, Sentiment, Insight)에 사용되는 LLM 프롬프트 템플릿. 코드를 수정하지 않고 프롬프트만 튜닝할 수 있도록 분리되어 있습니다.
-
-### `prompt_manager.py`
-*   **역할**: `config.yaml`에 정의된 프롬프트를 로드하고 제공하는 헬퍼 클래스입니다.
-
-### `qwen_analyzer.py`
-*   **역할**: vLLM API 서버와 통신하여 Qwen 모델에 추론을 요청합니다.
-*   **기능**: 텍스트와 이미지를 포함한 멀티모달 요청을 구성하고 응답을 받아옵니다.
+| 모듈 | 역할 |
+|------|------|
+| `main_analysis.py` | 전체 분석 파이프라인 조율 |
+| `config_loader.py` | 환경변수 > YAML > 기본값 우선순위 설정 관리 |
+| `data_loader.py` | 파일 시스템에서 보고서 데이터 로드 |
+| `qwen_analyzer.py` | vLLM API 통신 및 멀티모달 추론 |
+| `prompts/` | 엔터프라이즈급 프롬프트 관리 ([상세 문서](prompts/README.md)) |
 
 ---
 
