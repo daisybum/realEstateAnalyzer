@@ -150,13 +150,105 @@ python analysis/main_analysis.py --max_samples 5
 
 ---
 
-## 📊 6. 출력 형식
+## 🔄 6. 청킹 처리 (Chunked Image Processing)
+
+대용량 이미지(15장 이상)를 처리하기 위한 청킹 전략입니다.
+
+### 문제 상황
+
+```
+vLLM 모델 제한: MAX_MODEL_LEN = 32,768 토큰
+이미지당 토큰: ~2,000 토큰
+안전 이미지 수: ~12개 (여유 공간 포함)
+실제 보고서: 60+ 이미지 발생
+```
+
+### 청킹 전략
+
+```python
+# 12개씩 청크로 분할
+MAX_IMAGES_PER_CHUNK = 12
+
+# 예: 64개 이미지 → 6개 청크
+chunks = [
+    images[0:12],   # Chunk 1
+    images[12:24],  # Chunk 2
+    images[24:36],  # Chunk 3
+    images[36:48],  # Chunk 4
+    images[48:60],  # Chunk 5
+    images[60:64],  # Chunk 6 (4장)
+]
+```
+
+### 병합 규칙 (Deep Merge)
+
+| 데이터 타입 | 병합 전략 |
+|------------|----------|
+| **딕셔너리** | 재귀적 병합 |
+| **리스트** | 중복 제거 후 연결 |
+| **스칼라** | null이 아닌 마지막 값 |
+
+#### 병합 예시
+
+```json
+// Chunk 1 결과
+{
+  "district": {"name": "인천시 연수구"},
+  "complexes": [{"name": "송도자이", "price": 80000}]
+}
+
+// Chunk 2 결과
+{
+  "district": {"name": "인천시 연수구", "population": 350000},
+  "complexes": [{"name": "송도푸르지오", "price": 75000}]
+}
+
+// 병합 결과
+{
+  "district": {"name": "인천시 연수구", "population": 350000},
+  "complexes": [
+    {"name": "송도자이", "price": 80000},
+    {"name": "송도푸르지오", "price": 75000}
+  ],
+  "_chunk_info": {"total_chunks": 2, "merged": true}
+}
+```
+
+### 인사이트 생성 시 스마트 요약
+
+병합된 결과가 너무 크면 핵심 필드만 추출:
+
+```python
+MAX_CHARS = 6000  # ~2000 토큰
+
+priority_keys = ["district", "grades", "properties", 
+                 "investment_comment", "sentiment_score"]
+```
+
+### 성능 벤치마크
+
+| 이미지 수 | 청크 수 | 처리 시간 |
+|----------|--------|----------|
+| 3개 | 1 | ~2분 |
+| 12개 | 1 | ~4분 |
+| 64개 | 6 | **~22분** |
+
+---
+
+## 📊 7. 출력 형식
 
 분석 결과는 `analysis_results/{report_id}_analysis.json`에 저장됩니다:
 
 ```json
 {
   "report_id": "3189054",
+  "input_quality": {
+    "confidence_score": 0.75,
+    "text_length": 1500,
+    "image_count": 64,
+    "data_sources": ["full_text", "images_64"],
+    "hallucination_warnings": []
+  },
   "facts": { /* JSON 구조화 엔티티 */ },
   "verification": { /* 시각적 검증 결과 */ },
   "sentiment": { /* 시장 심리 분석 */ },
