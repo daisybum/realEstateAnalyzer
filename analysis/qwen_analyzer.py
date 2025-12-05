@@ -1,22 +1,35 @@
 import os
 import json
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from openai import OpenAI
 from langchain_core.prompts import ChatPromptTemplate
 
 class QwenAnalyzer:
-    def __init__(self, api_key: str = "EMPTY", base_url: str = "http://localhost:8000/v1"):
+    def __init__(self, 
+                 api_key: str = "EMPTY", 
+                 base_url: str = "http://localhost:8000/v1",
+                 model_name: Optional[str] = None):
         """
         Initialize the QwenAnalyzer with OpenAI-compatible vLLM client.
+        
+        Args:
+            api_key: API key for vLLM server
+            base_url: vLLM server URL
+            model_name: Model name (if None, loads from config)
         """
         self.client = OpenAI(
             api_key=api_key,
             base_url=base_url,
         )
-        # Model name should match what is being served by vLLM
-        # We'll assume a default or let the user specify. 
-        # For now, we'll fetch the first available model from the server or use a placeholder.
-        self.model_name = "Qwen/Qwen2.5-VL-72B-Instruct-AWQ" 
+        
+        # 모델명: 파라미터 > 환경변수 > 기본값
+        if model_name:
+            self.model_name = model_name
+        else:
+            self.model_name = os.environ.get(
+                "MODEL_NAME", 
+                "Qwen/Qwen3-VL-30B-A3B-Instruct"
+            ) 
 
     def analyze(self, text: str, images: List[str], prompt_template: ChatPromptTemplate, **kwargs) -> str:
         """
