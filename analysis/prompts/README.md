@@ -228,12 +228,33 @@ langsmith:
 
 ---
 
-## 📈 Future Improvements
+## 📈 Future Extensions
 
-- [ ] A/B 테스트 기반 프롬프트 최적화
-- [ ] 웹훅 기반 자동화 워크플로우
-- [ ] 프롬프트 성능 메트릭 대시보드
-- [ ] 멀티 모델 최적화 설정 저장
+현재 핵심 기능만 활성화되어 있으며, 아래 모듈은 미래 확장을 위해 보존됨:
+
+| 모듈 | 상태 | 용도 |
+|------|------|------|
+| `loaders.py` | ✅ 활성 | YAML 템플릿 로드 |
+| `manager.py` | ✅ 활성 | 핵심 인터페이스 |
+| `registry.py` | 🔮 준비됨 | 로컬 버전 관리 (Git-like) |
+| `templates.py` | 🔮 준비됨 | Few-shot, MessagesPlaceholder |
+| `langsmith_hub.py` | 🔮 준비됨 | 클라우드 레지스트리 연동 |
+
+### 활성화 방법
+
+```python
+# Few-shot 예시 사용
+pm = PromptManager(...)
+prompt = pm.with_few_shot("fact_extraction", examples=[...])
+
+# 로컬 버전 관리
+commit_hash = pm.register_prompt("my_prompt", template, tags=["dev"])
+pm.promote_prompt("my_prompt", from_env="dev", to_env="prod")
+
+# LangSmith Hub 연동
+pm.connect_langsmith(api_key="ls-...")
+pm.push_to_hub("fact_extraction", "my-org/prompt:prod")
+```
 
 ---
 
