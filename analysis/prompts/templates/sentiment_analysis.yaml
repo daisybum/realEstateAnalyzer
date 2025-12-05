@@ -1,7 +1,7 @@
 _type: chat
 name: sentiment_analysis
-version: "1.0.0"
-description: "임장 코멘트 및 지역 분위기 분석"
+version: "2.0.0"
+description: "임장 분위기 및 시장 심리 분석"
 tags: ["prod", "core"]
 
 input_variables:
@@ -13,17 +13,75 @@ messages:
     
   - role: user
     content: |
-      [임장 코멘트 및 지역 분위기 분석]
-      보고서 작성자의 현장 방문(임장) 코멘트를 분석하여 해당 지역의 전반적인 분위기와 투자 심리를 파악하십시오.
+      # Task: Market Sentiment & Field Visit (임장) Analysis
       
-      [분석 포인트]
-      1. 지역 분위기: 활기찬 상권인지, 조용한 베드타운인지, 노후화된 구도심인지 등.
-      2. 주민 특성: 젊은 부부, 학생, 노년층 등 주 거주층의 특성.
-      3. 매수 심리: 현장 부동산 소장님들의 브리핑 내용(매수 문의 증가/실종, 급매 소진 등).
+      Analyze the field visit report to assess market sentiment, hidden risks, and investment psychology.
       
-      [보고서 텍스트]
+      ## Input Report
+      ```
       {report_text}
+      ```
+      
+      ## Analysis Framework
+      
+      ### 1. Real Estate Agent Comments (부동산 사장님 코멘트)
+      Extract and interpret agent insights:
+      - **Buyer/Seller balance**: 매수 우위 vs 매도 우위
+      - **Transaction velocity**: 급매 소진 속도
+      - **Price trend expectations**: 상승/보합/하락 전망
+      - **Notable buyer demographics**: 주요 매수세 특성
+      
+      ### 2. On-site Atmosphere (현장 분위기)
+      Assess the neighborhood's vitality:
+      - **Commercial activity**: 상가 활성화 수준
+      - **Resident demographics**: 주민 연령대/가족 구성
+      - **Infrastructure quality**: 도로/시설 상태
+      - **Development signs**: 개발 진행 징후
+      
+      ### 3. Hidden Risk Signals (숨겨진 리스크)
+      Identify potential concerns:
+      - **Jeonse to monthly rent conversion**: 전세 → 월세 전환 추세
+      - **Vacancy rates**: 공실률 언급
+      - **Distressed sales**: 급매물 증가 여부
+      - **Negative sentiment**: 부정적 언급 (소음, 치안 등)
+      
+      ### 4. Investment Psychology Assessment
+      Evaluate overall market sentiment:
+      - **FOMO indicators**: 매수 급박함
+      - **Hesitation signals**: 관망세
+      - **Recovery signs**: 바닥 탈출 신호
+      
+      ## Output Format
+      
+      ```json
+      {
+        "agent_insights": {
+          "market_balance": "buyer_dominant|seller_dominant|balanced",
+          "transaction_speed": "fast|moderate|slow",
+          "price_outlook": "bullish|neutral|bearish",
+          "key_quotes": ["string"]
+        },
+        "field_atmosphere": {
+          "commercial_vitality": "high|medium|low",
+          "resident_profile": "string",
+          "overall_impression": "positive|neutral|negative"
+        },
+        "risk_signals": [
+          {
+            "type": "string",
+            "description": "string",
+            "severity": "high|medium|low"
+          }
+        ],
+        "sentiment_score": {
+          "value": "1-10 scale",
+          "interpretation": "string"
+        },
+        "investment_timing": "aggressive_buy|cautious_buy|wait|avoid"
+      }
+      ```
 
 metadata:
   author: "realEstateAnalyzer"
   created_at: "2024-12-05"
+  updated_at: "2024-12-05"

@@ -2,7 +2,9 @@
 Real Estate Analysis Pipeline
 
 부동산 임장 보고서 분석 파이프라인 메인 진입점
+Ontology-based Knowledge Graph 구축을 위한 정보 추출
 """
+import os
 import json
 import logging
 import argparse
@@ -22,6 +24,24 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+
+def setup_langsmith():
+    """LangSmith 트레이싱 초기화"""
+    config = get_config()
+    
+    if config.langsmith.enabled:
+        os.environ["LANGSMITH_TRACING"] = "true" if config.langsmith.tracing else "false"
+        os.environ["LANGSMITH_PROJECT"] = config.langsmith.project
+        
+        # API 키는 환경변수에서 이미 설정되어 있어야 함
+        if os.environ.get("LANGSMITH_API_KEY"):
+            logger.info(f"LangSmith tracing enabled for project: {config.langsmith.project}")
+            return True
+        else:
+            logger.warning("LangSmith enabled but LANGSMITH_API_KEY not set")
+            return False
+    return False
 
 
 class AnalysisPipeline:
@@ -164,6 +184,9 @@ def parse_args() -> argparse.Namespace:
 def main():
     """메인 진입점"""
     args = parse_args()
+    
+    # LangSmith 트레이싱 초기화
+    setup_langsmith()
     
     # 컴포넌트 초기화
     loader = DataLoader(args.data_dir)

@@ -1,8 +1,8 @@
 _type: chat
 name: visual_verification
-version: "1.0.0"
-description: "시각적 데이터 정밀 분석 및 텍스트 주장 검증"
-tags: ["prod", "core"]
+version: "2.0.0"
+description: "시각적 데이터 검증 및 차트/지도 분석"
+tags: ["prod", "core", "multimodal"]
 
 input_variables:
   - report_text
@@ -13,22 +13,71 @@ messages:
     
   - role: user
     content: |
-      [STEP 1-2. 시각적 데이터 정밀 분석 (Visual Extraction)]
-      첨부된 지도, 차트, 그래프 이미지를 시각적으로 분석하여 텍스트 주장을 검증하십시오.
+      # Task: Visual Data Verification & Chart Analysis
       
-      [분석 항목]
-      1. 지도(Map) 분석:
-         - 지역 입지: 해당 지역의 위치가 주요 업무지구(강남 등)와 물리적/교통적으로 얼마나 가까운지 확인.
-         - 생활권 구분: 상권, 학원가, 주거지가 어떻게 형성되어 있는지 시각적 확인.
-      2. 차트(Chart) 분석:
-         - 공급 물량 그래프: 향후 3년 내 공급 막대그래프가 적정 수요선을 초과하는지 시각적 검증.
-         - 매매/전세 지수: 매매가와 전세가가 만나는지, 벌어지는지(버블/저평가) 추세 확인.
+      Analyze the provided images (charts, maps, tables) along with text to verify claims and extract visual data.
       
-      [보고서 텍스트]
+      ## Input Context
+      ```
       {report_text}
+      ```
       
-      위 항목들에 대해 시각적 증거를 바탕으로 '검증됨', '불일치', '확인불가'로 판정하고 상세 근거를 서술하십시오.
+      ## Visual Analysis Tasks
+      
+      ### 1. Supply Chart Analysis (공급 물량 차트)
+      If supply volume charts are present:
+      - Read exact numbers for each year (2024, 2025, 2026, 2027)
+      - Identify the "Appropriate Demand" reference line if visible
+      - Calculate total 3-year supply
+      - Assess supply risk based on visual data
+      
+      ### 2. Price Trend Charts (시세 추이 그래프)
+      If price trend charts are present:
+      - Identify peak price and current price levels
+      - Calculate percentage drop from peak
+      - Note any inflection points or trend changes
+      
+      ### 3. Map Analysis (지도 분석)
+      If maps are present:
+      - Identify key landmarks (subway stations, schools, commercial areas)
+      - Estimate distances to job centers
+      - Note any development zones or infrastructure projects
+      
+      ### 4. Table Data Extraction (표 데이터)
+      If comparison tables are present:
+      - Extract all numerical values accurately
+      - Identify ranking or ordering patterns
+      - Cross-reference with text claims
+      
+      ## Verification Output
+      
+      Provide a structured verification report:
+      
+      ```json
+      {
+        "visual_sources": [
+          {
+            "type": "supply_chart|price_chart|map|table",
+            "description": "string",
+            "extracted_data": {},
+            "confidence": "high|medium|low"
+          }
+        ],
+        "text_claim_verification": [
+          {
+            "claim": "string from text",
+            "visual_evidence": "string",
+            "status": "verified|unverified|contradicted|no_visual_evidence"
+          }
+        ],
+        "additional_insights": "string - insights from visuals not mentioned in text",
+        "data_quality_notes": "string - any caveats about visual data quality"
+      }
+      ```
+      
+      **Note**: If no relevant images are provided, analyze based on text context and note the lack of visual evidence.
 
 metadata:
   author: "realEstateAnalyzer"
   created_at: "2024-12-05"
+  updated_at: "2024-12-05"
