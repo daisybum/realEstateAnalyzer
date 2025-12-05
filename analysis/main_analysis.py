@@ -146,13 +146,20 @@ class AnalysisPipeline:
         )
     
     def _extract_region_name(self, facts_json: str) -> str:
-        """팩트 JSON에서 지역명 추출"""
+        """팩트 JSON에서 지역명 추출 (온톨로지 기반 구조)"""
         try:
             clean = facts_json.replace("```json", "").replace("```", "").strip()
             facts_dict = json.loads(clean)
+            
+            # 새 온톨로지 구조: district.name
+            if "district" in facts_dict and isinstance(facts_dict["district"], dict):
+                return facts_dict["district"].get("name", "Unknown Region")
+            
+            # 레거시 구조 폴백
             return facts_dict.get("region_name", 
                                   facts_dict.get("complex_name", "Unknown Region"))
-        except (json.JSONDecodeError, KeyError):
+        except (json.JSONDecodeError, KeyError, TypeError) as e:
+            logger.debug(f"Region name extraction failed: {e}")
             return "Unknown Region"
     
     def _save_result(self, report_id: str, result: dict) -> None:

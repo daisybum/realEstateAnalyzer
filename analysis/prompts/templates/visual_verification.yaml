@@ -51,31 +51,30 @@ messages:
       
       ## Verification Output
       
-      Provide a structured verification report:
+      Provide a structured verification report in JSON format:
       
-      ```json
-      {
+      {{
         "visual_sources": [
-          {
+          {{
             "type": "supply_chart|price_chart|map|table",
             "description": "string",
-            "extracted_data": {},
+            "extracted_data": {{}},
             "confidence": "high|medium|low"
-          }
+          }}
         ],
         "text_claim_verification": [
-          {
+          {{
             "claim": "string from text",
             "visual_evidence": "string",
             "status": "verified|unverified|contradicted|no_visual_evidence"
-          }
+          }}
         ],
         "additional_insights": "string - insights from visuals not mentioned in text",
         "data_quality_notes": "string - any caveats about visual data quality"
-      }
-      ```
+      }}
       
       **Note**: If no relevant images are provided, analyze based on text context and note the lack of visual evidence.
+      Return ONLY the JSON object without markdown code blocks.
 
 metadata:
   author: "realEstateAnalyzer"

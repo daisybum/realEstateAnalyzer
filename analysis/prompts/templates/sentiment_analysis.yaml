@@ -51,35 +51,35 @@ messages:
       - **Hesitation signals**: 관망세
       - **Recovery signs**: 바닥 탈출 신호
       
-      ## Output Format
+      ## Output Format (JSON only, no markdown)
       
-      ```json
-      {
-        "agent_insights": {
+      {{
+        "agent_insights": {{
           "market_balance": "buyer_dominant|seller_dominant|balanced",
           "transaction_speed": "fast|moderate|slow",
           "price_outlook": "bullish|neutral|bearish",
           "key_quotes": ["string"]
-        },
-        "field_atmosphere": {
+        }},
+        "field_atmosphere": {{
           "commercial_vitality": "high|medium|low",
           "resident_profile": "string",
           "overall_impression": "positive|neutral|negative"
-        },
+        }},
         "risk_signals": [
-          {
+          {{
             "type": "string",
             "description": "string",
             "severity": "high|medium|low"
-          }
+          }}
         ],
-        "sentiment_score": {
+        "sentiment_score": {{
           "value": "1-10 scale",
           "interpretation": "string"
-        },
+        }},
         "investment_timing": "aggressive_buy|cautious_buy|wait|avoid"
-      }
-      ```
+      }}
+      
+      Return ONLY the JSON object without markdown code blocks.
 
 metadata:
   author: "realEstateAnalyzer"

@@ -61,42 +61,40 @@ messages:
       
       Respond with ONLY valid JSON matching this schema:
       
-      ```json
-      {
-        "district": {
+      {{
+        "district": {{
           "entity_type": "District",
           "name": "string",
           "parent_city": "string",
-          "properties": {
+          "properties": {{
             "population": "int or null",
             "appropriate_demand": "int or null",
             "supply_volume_3yr": "int or null",
             "supply_risk_status": "Over-supply|Appropriate|Shortage|Unknown"
-          },
-          "grades": {
-            "jobs": {"grade": "S|A|B|C", "evidence": "string"},
-            "transport": {"grade": "S|A|B|C", "lines": ["string"], "gangnam_minutes": "int or null"},
-            "school": {"grade": "S|A|B|C", "evidence": "string"},
-            "environment": {"grade": "S|A|B|C", "facilities": ["string"]}
-          }
-        },
+          }},
+          "grades": {{
+            "jobs": {{"grade": "S|A|B|C", "evidence": "string"}},
+            "transport": {{"grade": "S|A|B|C", "lines": ["string"], "gangnam_minutes": "int or null"}},
+            "school": {{"grade": "S|A|B|C", "evidence": "string"}},
+            "environment": {{"grade": "S|A|B|C", "facilities": ["string"]}}
+          }}
+        }},
         "complexes": [
-          {
+          {{
             "entity_type": "ApartmentComplex",
             "name": "string",
-            "properties": {
+            "properties": {{
               "sales_price": "int",
               "jeonse_price": "int",
               "gap_price": "int",
               "jeonse_rate": "float",
               "is_undervalued": "boolean"
-            },
+            }},
             "investment_comment": "string"
-          }
+          }}
         ],
         "reasoning_chain": "string explaining the analysis logic"
-      }
-      ```
+      }}
       
       **Important**: Return ONLY the JSON object. No markdown code blocks, no additional text.
 
