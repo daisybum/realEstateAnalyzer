@@ -212,9 +212,21 @@ class AnalysisPipeline:
         if len(text) <= max_chars:
             return text
         
+        # 청크 연결된 텍스트에서 JSON 추출 시도
+        # "=== Chunk X ===" 패턴 감지
+        if "=== Chunk" in text:
+            return self._extract_summary_from_chunks(text, max_chars)
+        
         # JSON인 경우 핵심 필드만 추출 시도
         try:
             clean = text.replace("```json", "").replace("```", "").strip()
+            
+            # JSON 시작/끝 찾기
+            start_idx = clean.find("{")
+            end_idx = clean.rfind("}")
+            if start_idx != -1 and end_idx != -1:
+                clean = clean[start_idx:end_idx + 1]
+            
             data = json.loads(clean)
             
             # 간소화된 요약 생성
@@ -227,6 +239,52 @@ class AnalysisPipeline:
         # 일반 텍스트는 잘라내기
         return text[:max_chars] + "\n... [truncated]"
     
+    def _extract_summary_from_chunks(self, text: str, max_chars: int) -> str:
+        """청크 연결 텍스트에서 핵심 데이터 요약 추출"""
+        import re
+        
+        # 각 청크에서 JSON 추출
+        chunk_pattern = r"=== Chunk \d+ \(\d+ images\) ===\s*([\s\S]*?)(?==== Chunk|\Z)"
+        matches = re.findall(chunk_pattern, text)
+        
+        parsed_jsons = []
+        for match in matches:
+            try:
+                clean = match.replace("```json", "").replace("```", "").strip()
+                start_idx = clean.find("{")
+                end_idx = clean.rfind("}")
+                if start_idx != -1 and end_idx != -1:
+                    json_str = clean[start_idx:end_idx + 1]
+                    parsed = json.loads(json_str)
+                    parsed_jsons.append(parsed)
+            except (json.JSONDecodeError, ValueError):
+                continue
+        
+        if not parsed_jsons:
+            return text[:max_chars] + "\n... [truncated]"
+        
+        # 첫 번째 청크의 district 정보 + 모든 complexes 수집
+        summary = {
+            "district": parsed_jsons[0].get("district", {}),
+            "grades": parsed_jsons[0].get("grades", {}),
+            "complexes_summary": {
+                "total_extracted": sum(len(p.get("complexes", [])) for p in parsed_jsons),
+                "sample": []
+            }
+        }
+        
+        # 최대 5개 단지 샘플
+        for p in parsed_jsons:
+            for c in p.get("complexes", [])[:2]:
+                if len(summary["complexes_summary"]["sample"]) < 5:
+                    summary["complexes_summary"]["sample"].append({
+                        "name": c.get("name"),
+                        "jeonse_rate": c.get("properties", {}).get("jeonse_rate"),
+                        "is_undervalued": c.get("properties", {}).get("is_undervalued")
+                    })
+        
+        return json.dumps(summary, ensure_ascii=False, indent=2)
+    
     def _summarize_json(self, data: dict, max_chars: int) -> dict:
         """JSON 데이터 핵심만 추출"""
         result = {}
@@ -237,15 +295,27 @@ class AnalysisPipeline:
         
         for key in priority_keys:
             if key in data:
-                result[key] = data[key]
+                value = data[key]
+                # 긴 문자열 필드 잘라내기
+                if isinstance(value, str) and len(value) > 500:
+                    value = value[:500] + "..."
+                result[key] = value
+        
+        # complexes는 최대 5개만
+        if "complexes" in data and isinstance(data["complexes"], list):
+            result["complexes"] = data["complexes"][:5]
+            if len(data["complexes"]) > 5:
+                result["_complexes_note"] = f"Showing 5 of {len(data['complexes'])}"
         
         # 나머지 필드는 간소화
         for key, value in data.items():
-            if key not in result:
+            if key not in result and key not in ["complexes", "reasoning_chain"]:
                 if isinstance(value, list) and len(value) > 3:
-                    result[key] = value[:3] + ["... truncated"]
+                    result[key] = value[:3]
                 elif isinstance(value, dict):
                     result[key] = {k: v for k, v in list(value.items())[:5]}
+                elif isinstance(value, str) and len(value) > 300:
+                    result[key] = value[:300] + "..."
                 else:
                     result[key] = value
         

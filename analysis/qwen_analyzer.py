@@ -168,27 +168,114 @@ class QwenAnalyzer:
         return self._merge_text_results(chunk_results)
     
     def _try_merge_json_results(self, chunk_results: List[Dict]) -> Optional[str]:
-        """JSON 결과 병합 시도"""
+        """JSON 결과 병합 시도 (필드 정제 포함)"""
         try:
             parsed_results = []
             for cr in chunk_results:
                 result_str = cr["result"]
                 # JSON 블록 추출
                 clean = result_str.replace("```json", "").replace("```", "").strip()
+                
+                # JSON 시작/끝 찾기 (잘못된 내용 제거)
+                start_idx = clean.find("{")
+                end_idx = clean.rfind("}")
+                if start_idx == -1 or end_idx == -1:
+                    logger.warning(f"Chunk {cr['chunk_id']}: No valid JSON found")
+                    continue
+                
+                clean = clean[start_idx:end_idx + 1]
                 parsed = json.loads(clean)
+                
+                # 필드 정제 (긴 문자열 잘라내기)
+                parsed = self._sanitize_json_fields(parsed)
                 parsed_results.append(parsed)
+            
+            if not parsed_results:
+                return None
             
             # 결과 병합
             merged = self._deep_merge_dicts(parsed_results)
             merged["_chunk_info"] = {
                 "total_chunks": len(chunk_results),
-                "merged": True
+                "merged": True,
+                "parsed_chunks": len(parsed_results)
             }
             
-            return json.dumps(merged, ensure_ascii=False, indent=2)
+            # 최종 결과 크기 제한 (20KB)
+            result_json = json.dumps(merged, ensure_ascii=False, indent=2)
+            if len(result_json) > 20000:
+                logger.warning(f"Merged JSON too large ({len(result_json)} chars), summarizing...")
+                merged = self._summarize_merged_result(merged)
+                result_json = json.dumps(merged, ensure_ascii=False, indent=2)
+            
+            return result_json
         except (json.JSONDecodeError, KeyError, TypeError) as e:
-            logger.debug(f"JSON merge failed: {e}")
+            logger.warning(f"JSON merge failed: {e}")
             return None
+    
+    def _sanitize_json_fields(self, data: Dict, max_str_len: int = 1000) -> Dict:
+        """JSON 필드 정제 - 긴 문자열 잘라내기, 반복 패턴 제거"""
+        if not isinstance(data, dict):
+            return data
+        
+        result = {}
+        for key, value in data.items():
+            if isinstance(value, str):
+                # 긴 문자열 잘라내기
+                if len(value) > max_str_len:
+                    # 반복 패턴 감지 (같은 문장 3번 이상 반복)
+                    if self._has_repetition(value):
+                        value = value[:500] + "... [repetitive content truncated]"
+                    else:
+                        value = value[:max_str_len] + "... [truncated]"
+                result[key] = value
+            elif isinstance(value, dict):
+                result[key] = self._sanitize_json_fields(value, max_str_len)
+            elif isinstance(value, list):
+                result[key] = [
+                    self._sanitize_json_fields(item, max_str_len) if isinstance(item, dict)
+                    else (item[:max_str_len] + "..." if isinstance(item, str) and len(item) > max_str_len else item)
+                    for item in value
+                ]
+            else:
+                result[key] = value
+        
+        return result
+    
+    def _has_repetition(self, text: str, min_chunk: int = 50) -> bool:
+        """텍스트에 반복 패턴이 있는지 감지"""
+        if len(text) < min_chunk * 3:
+            return False
+        
+        # 50자 단위로 비교
+        chunks = [text[i:i+min_chunk] for i in range(0, len(text) - min_chunk, min_chunk)]
+        if len(chunks) < 3:
+            return False
+        
+        # 첫 번째 청크가 3번 이상 나타나면 반복으로 판단
+        first_chunk = chunks[0]
+        count = sum(1 for c in chunks if c == first_chunk)
+        return count >= 3
+    
+    def _summarize_merged_result(self, data: Dict) -> Dict:
+        """병합된 결과 요약 (크기 제한용)"""
+        result = {}
+        
+        # 핵심 필드만 유지
+        priority_keys = ["district", "entity_type", "name", "grades", "properties", 
+                        "investment_comment", "complexes", "_chunk_info"]
+        
+        for key in priority_keys:
+            if key in data:
+                value = data[key]
+                # complexes 리스트는 최대 10개로 제한
+                if key == "complexes" and isinstance(value, list) and len(value) > 10:
+                    result[key] = value[:10]
+                    result["_complexes_truncated"] = f"Showing 10 of {len(value)}"
+                else:
+                    result[key] = value
+        
+        return result
     
     def _deep_merge_dicts(self, dicts: List[Dict]) -> Dict:
         """딕셔너리 리스트 깊은 병합
