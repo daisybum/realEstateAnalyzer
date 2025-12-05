@@ -27,21 +27,22 @@ logger = logging.getLogger(__name__)
 
 
 def setup_langsmith():
-    """LangSmith 트레이싱 초기화"""
-    config = get_config()
+    """LangSmith 트레이싱 초기화 (SecretsManager 사용)"""
+    from secrets_manager import get_langsmith_config
     
-    if config.langsmith.enabled:
-        os.environ["LANGSMITH_TRACING"] = "true" if config.langsmith.tracing else "false"
-        os.environ["LANGSMITH_PROJECT"] = config.langsmith.project
+    config = get_langsmith_config()
+    
+    if config["enabled"]:
+        os.environ["LANGSMITH_TRACING"] = "true" if config["tracing"] else "false"
+        os.environ["LANGSMITH_PROJECT"] = config["project"]
+        os.environ["LANGSMITH_API_KEY"] = config["api_key"]
+        os.environ["LANGSMITH_ENDPOINT"] = config["endpoint"]
         
-        # API 키는 환경변수에서 이미 설정되어 있어야 함
-        if os.environ.get("LANGSMITH_API_KEY"):
-            logger.info(f"LangSmith tracing enabled for project: {config.langsmith.project}")
-            return True
-        else:
-            logger.warning("LangSmith enabled but LANGSMITH_API_KEY not set")
-            return False
-    return False
+        logger.info(f"LangSmith tracing enabled for project: {config['project']}")
+        return True
+    else:
+        logger.info("LangSmith disabled (no API key found)")
+        return False
 
 
 class AnalysisPipeline:
