@@ -189,16 +189,67 @@ class AnalysisPipeline:
                           facts: str, 
                           verification: str, 
                           sentiment: str) -> str:
-        """인사이트 생성"""
+        """인사이트 생성 (입력 크기 제한 적용)"""
         logger.info("  - Generating insights...")
+        
+        # 토큰 제한을 위해 입력 데이터 크기 제한 (총 ~20K 문자)
+        MAX_CHARS = 6000
+        facts_truncated = self._truncate_smart(facts, MAX_CHARS)
+        verification_truncated = self._truncate_smart(verification, MAX_CHARS)
+        sentiment_truncated = self._truncate_smart(sentiment, MAX_CHARS)
+        
         prompt = self.pm.get_insight_generation_prompt()
         return self.analyzer.analyze(
             "", [], prompt,
             region_name=region_name,
-            fact_data=facts,
-            verification_result=verification,
-            risk_analysis=sentiment,
+            fact_data=facts_truncated,
+            verification_result=verification_truncated,
+            risk_analysis=sentiment_truncated,
         )
+    
+    def _truncate_smart(self, text: str, max_chars: int) -> str:
+        """스마트 텍스트 잘라내기 (JSON 구조 보존 시도)"""
+        if len(text) <= max_chars:
+            return text
+        
+        # JSON인 경우 핵심 필드만 추출 시도
+        try:
+            clean = text.replace("```json", "").replace("```", "").strip()
+            data = json.loads(clean)
+            
+            # 간소화된 요약 생성
+            if isinstance(data, dict):
+                summary = self._summarize_json(data, max_chars)
+                return json.dumps(summary, ensure_ascii=False, indent=2)
+        except (json.JSONDecodeError, TypeError):
+            pass
+        
+        # 일반 텍스트는 잘라내기
+        return text[:max_chars] + "\n... [truncated]"
+    
+    def _summarize_json(self, data: dict, max_chars: int) -> dict:
+        """JSON 데이터 핵심만 추출"""
+        result = {}
+        
+        # 핵심 필드 우선순위
+        priority_keys = ["district", "entity_type", "name", "grades", "properties", 
+                        "investment_comment", "sentiment_score", "risk_signals"]
+        
+        for key in priority_keys:
+            if key in data:
+                result[key] = data[key]
+        
+        # 나머지 필드는 간소화
+        for key, value in data.items():
+            if key not in result:
+                if isinstance(value, list) and len(value) > 3:
+                    result[key] = value[:3] + ["... truncated"]
+                elif isinstance(value, dict):
+                    result[key] = {k: v for k, v in list(value.items())[:5]}
+                else:
+                    result[key] = value
+        
+        return result
     
     def _extract_region_name(self, facts_json: str) -> str:
         """팩트 JSON에서 지역명 추출 (온톨로지 기반 구조)"""
