@@ -73,11 +73,24 @@ class AnalysisPipeline:
         Returns:
             분석 결과 딕셔너리 또는 None (실패 시)
         """
+        # 입력 품질 검증
         if data.is_empty:
             logger.warning(f"Skipping empty report {data.id}")
             return None
         
+        # 최소 입력 길이 검증 (할루시네이션 방지)
+        MIN_TEXT_LENGTH = 100
+        if len(data.text) < MIN_TEXT_LENGTH:
+            logger.warning(
+                f"Skipping {data.id}: Insufficient input "
+                f"({len(data.text)} chars < {MIN_TEXT_LENGTH} required)"
+            )
+            return None
+        
         logger.info(f"Processing report {data.id}...")
+        
+        # 입력 품질 메트릭 계산
+        input_quality = self._calculate_input_quality(data)
         
         try:
             # 1. 팩트 추출
@@ -95,9 +108,10 @@ class AnalysisPipeline:
                 region_name, facts_json, verification, sentiment
             )
             
-            # 결과 저장
+            # 결과 저장 (신뢰도 점수 포함)
             result = {
                 "report_id": data.id,
+                "input_quality": input_quality,
                 "facts": facts_json,
                 "verification": verification,
                 "sentiment": sentiment,
@@ -110,6 +124,45 @@ class AnalysisPipeline:
         except Exception as e:
             logger.error(f"Failed to process report {data.id}: {e}")
             return None
+    
+    def _calculate_input_quality(self, data: ReportData) -> dict:
+        """입력 데이터 품질 메트릭 계산"""
+        text_length = len(data.text)
+        image_count = len(data.images)
+        
+        # 신뢰도 점수 계산 (0.0 ~ 1.0)
+        text_score = min(text_length / 1000, 1.0)  # 1000자 이상이면 만점
+        image_score = min(image_count / 5, 1.0)   # 5개 이상이면 만점
+        confidence_score = round((text_score * 0.7) + (image_score * 0.3), 2)
+        
+        # 데이터 소스 식별
+        data_sources = []
+        if text_length > 500:
+            data_sources.append("full_text")
+        elif text_length > 100:
+            data_sources.append("partial_text")
+        else:
+            data_sources.append("title_only")
+        
+        if image_count > 0:
+            data_sources.append(f"images_{image_count}")
+        
+        # 할루시네이션 경고
+        warnings = []
+        if text_length < 300:
+            warnings.append("Low text content - higher hallucination risk")
+        if image_count == 0:
+            warnings.append("No images - visual claims may be fabricated")
+        if text_length < 500 and image_count < 3:
+            warnings.append("Insufficient data - results may be unreliable")
+        
+        return {
+            "confidence_score": confidence_score,
+            "text_length": text_length,
+            "image_count": image_count,
+            "data_sources": data_sources,
+            "hallucination_warnings": warnings,
+        }
     
     def _extract_facts(self, data: ReportData) -> str:
         """팩트 추출"""
