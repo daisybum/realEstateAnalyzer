@@ -81,7 +81,7 @@ services:
 
     # Startup command
     command: >
-      vllm serve ${MODEL_NAME} --tensor-parallel-size ${TENSOR_PARALLEL_SIZE} --gpu-memory-utilization ${GPU_MEMORY_UTILIZATION} --max-model-len ${MAX_MODEL_LEN} --trust-remote-code --host 0.0.0.0 --port 8000
+      vllm serve ${MODEL_NAME} --tensor-parallel-size ${TENSOR_PARALLEL_SIZE} --gpu-memory-utilization ${GPU_MEMORY_UTILIZATION} --max-model-len ${MAX_MODEL_LEN} --trust-remote-code --host 0.0.0.0 --port 8000 --allowed-local-media-path /workspace/app --allowed-local-media-path /workspace/data
 
     # Restart policy
     restart: unless-stopped

@@ -15,11 +15,14 @@ class DataLoader:
     def get_report_ids(self) -> List[str]:
         """
         Get a list of all report IDs (folder names) in the base path.
+        Sorted in descending order by post_id (largest first).
         """
         if not self.base_path.exists():
             raise FileNotFoundError(f"Base path {self.base_path} does not exist.")
         
-        return [d.name for d in self.base_path.iterdir() if d.is_dir()]
+        report_ids = [d.name for d in self.base_path.iterdir() if d.is_dir() and d.name.isdigit()]
+        # Sort by post_id descending (largest first)
+        return sorted(report_ids, key=lambda x: int(x), reverse=True)
 
     def load_report(self, report_id: str) -> Dict[str, Union[str, List[str]]]:
         """

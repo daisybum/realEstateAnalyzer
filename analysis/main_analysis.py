@@ -37,7 +37,7 @@ def main():
     parser.add_argument("--api_url", type=str, default=system_config.get("api_url", "http://localhost:8000/v1"), help="vLLM API URL")
     parser.add_argument("--model", type=str, default=system_config.get("model_name", "Qwen/Qwen2.5-VL-72B-Instruct-AWQ"), help="Model name")
     parser.add_argument("--api_key", type=str, default=system_config.get("api_key", "EMPTY"), help="API Key")
-    parser.add_argument("--max_samples", type=int, default=system_config.get("max_samples", 1), help="Maximum number of samples to process")
+    parser.add_argument("--max_samples", type=int, default=system_config.get("max_samples", 100000), help="Maximum number of samples to process")
     args = parser.parse_args()
 
     # Initialize components
