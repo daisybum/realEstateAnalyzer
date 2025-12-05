@@ -25,7 +25,7 @@ class QwenAnalyzer:
     DEFAULT_MODEL = "Qwen/Qwen3-VL-30B-A3B-Instruct"
     DEFAULT_TEMPERATURE = 0.1
     DEFAULT_MAX_TOKENS = 8192
-    MAX_IMAGES = 100  # 이미지 개수 제한
+    MAX_IMAGES = 15  # 32768 토큰 제한에 맞춤 (이미지당 ~2000토큰)
     
     def __init__(self, 
                  api_key: str = "EMPTY", 

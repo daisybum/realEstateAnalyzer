@@ -38,7 +38,7 @@ services:
       - MODEL_NAME=${MODEL_NAME:-Qwen/Qwen3-VL-30B-A3B-Instruct}
       - TENSOR_PARALLEL_SIZE=${TENSOR_PARALLEL_SIZE:-1}
       - GPU_MEMORY_UTILIZATION=${GPU_MEMORY_UTILIZATION:-0.90}
-      - MAX_MODEL_LEN=${MAX_MODEL_LEN:-65536}
+      - MAX_MODEL_LEN=${MAX_MODEL_LEN:-32768}
       - TRUST_REMOTE_CODE=true
 
       # ----- External Services -----
