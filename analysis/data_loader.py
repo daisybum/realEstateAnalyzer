@@ -113,8 +113,11 @@ class DataLoader:
             return ""
     
     def _load_images(self, report_dir: Path) -> List[str]:
-        """이미지 파일 경로들 로드 (정렬됨)"""
-        images = sorted(report_dir.glob("*.png"))
+        """이미지 파일 경로들 로드 (정렬됨) - png, jpg, jpeg 지원"""
+        images = []
+        for ext in ["*.png", "*.jpg", "*.jpeg"]:
+            images.extend(report_dir.glob(ext))
+        images = sorted(images, key=lambda x: x.name)
         return [str(img.absolute()) for img in images]
     
     def _find_file(self, report_dir: Path, pattern: str) -> Optional[str]:

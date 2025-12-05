@@ -78,12 +78,14 @@ class AnalysisPipeline:
             logger.warning(f"Skipping empty report {data.id}")
             return None
         
-        # 최소 입력 길이 검증 (할루시네이션 방지)
-        MIN_TEXT_LENGTH = 100
-        if len(data.text) < MIN_TEXT_LENGTH:
+        # 입력 품질 검증: 이미지 또는 문서가 없으면 스킵
+        has_images = len(data.images) > 0
+        has_documents = data.pdf is not None or data.pptx is not None
+        
+        if not has_images and not has_documents:
             logger.warning(
-                f"Skipping {data.id}: Insufficient input "
-                f"({len(data.text)} chars < {MIN_TEXT_LENGTH} required)"
+                f"Skipping {data.id}: No media files "
+                f"(images: {len(data.images)}, pdf: {data.pdf is not None}, pptx: {data.pptx is not None})"
             )
             return None
         
