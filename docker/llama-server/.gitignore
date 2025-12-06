@@ -1,0 +1,6 @@
+# Model files (large binary files)
+models/
+*.gguf
+
+# Environment files with secrets
+.env
