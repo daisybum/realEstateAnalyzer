@@ -322,20 +322,53 @@ class AnalysisPipeline:
         return result
     
     def _extract_region_name(self, facts_json: str) -> str:
-        """팩트 JSON에서 지역명 추출 (온톨로지 기반 구조)"""
+        """팩트 JSON에서 지역명 추출 (청크 텍스트 포맷 지원)"""
+        import re
+        
+        # 청크 연결 텍스트인 경우 첫 번째 청크에서 추출
+        if "=== Chunk" in facts_json:
+            # 첫 번째 JSON 블록에서 지역명 추출
+            name_match = re.search(r'"name"\s*:\s*"([^"]+)"', facts_json)
+            if name_match:
+                return name_match.group(1)
+            
+            # parent_city도 시도
+            city_match = re.search(r'"parent_city"\s*:\s*"([^"]+)"', facts_json)
+            if city_match:
+                return city_match.group(1)
+            
+            return "Unknown Region"
+        
+        # 일반 JSON 파싱
         try:
             clean = facts_json.replace("```json", "").replace("```", "").strip()
+            
+            # JSON 시작/끝 찾기
+            start_idx = clean.find("{")
+            end_idx = clean.rfind("}")
+            if start_idx != -1 and end_idx != -1:
+                clean = clean[start_idx:end_idx + 1]
+            
             facts_dict = json.loads(clean)
             
             # 새 온톨로지 구조: district.name
             if "district" in facts_dict and isinstance(facts_dict["district"], dict):
-                return facts_dict["district"].get("name", "Unknown Region")
+                name = facts_dict["district"].get("name")
+                parent = facts_dict["district"].get("parent_city", "")
+                if name:
+                    return f"{name}, {parent}" if parent else name
             
             # 레거시 구조 폴백
             return facts_dict.get("region_name", 
                                   facts_dict.get("complex_name", "Unknown Region"))
         except (json.JSONDecodeError, KeyError, TypeError) as e:
             logger.debug(f"Region name extraction failed: {e}")
+            
+            # 정규식으로 지역명 추출 시도
+            name_match = re.search(r'"name"\s*:\s*"([^"]+)"', facts_json)
+            if name_match:
+                return name_match.group(1)
+            
             return "Unknown Region"
     
     def _save_result(self, report_id: str, result: dict) -> None:

@@ -168,7 +168,7 @@ class QwenAnalyzer:
         return self._merge_text_results(chunk_results)
     
     def _try_merge_json_results(self, chunk_results: List[Dict]) -> Optional[str]:
-        """JSON 결과 병합 시도 (필드 정제 포함)"""
+        """JSON 결과 병합 시도 (필드 정제 + JSON 수리 포함)"""
         try:
             parsed_results = []
             for cr in chunk_results:
@@ -184,7 +184,15 @@ class QwenAnalyzer:
                     continue
                 
                 clean = clean[start_idx:end_idx + 1]
-                parsed = json.loads(clean)
+                
+                # JSON 수리 시도
+                clean = self._repair_json(clean)
+                
+                try:
+                    parsed = json.loads(clean)
+                except json.JSONDecodeError as e:
+                    logger.warning(f"Chunk {cr['chunk_id']}: JSON parse error after repair: {e}")
+                    continue
                 
                 # 필드 정제 (긴 문자열 잘라내기)
                 parsed = self._sanitize_json_fields(parsed)
@@ -212,6 +220,42 @@ class QwenAnalyzer:
         except (json.JSONDecodeError, KeyError, TypeError) as e:
             logger.warning(f"JSON merge failed: {e}")
             return None
+    
+    def _repair_json(self, json_str: str) -> str:
+        """일반적인 JSON 구문 오류 수리"""
+        import re
+        
+        # 1. 후행 쉼표 제거 (배열과 객체 끝)
+        json_str = re.sub(r',(\s*[\]}])', r'\1', json_str)
+        
+        # 2. 누락된 쉼표 추가 (}{ 또는 ][ 사이)
+        json_str = re.sub(r'(\})\s*(\{)', r'\1,\2', json_str)
+        json_str = re.sub(r'(\])\s*(\[)', r'\1,\2', json_str)
+        
+        # 3. 잘린 문자열 내 이스케이프 안 된 따옴표 처리
+        # 이 부분은 복잡하므로 간단한 케이스만 처리
+        
+        # 4. 불완전한 JSON 끝 처리 (열린 괄호 닫기)
+        open_braces = json_str.count('{') - json_str.count('}')
+        open_brackets = json_str.count('[') - json_str.count(']')
+        
+        if open_braces > 0:
+            json_str = json_str.rstrip() + '}' * open_braces
+        if open_brackets > 0:
+            json_str = json_str.rstrip() + ']' * open_brackets
+        
+        # 5. 불완전한 문자열 닫기 (홀수 따옴표)
+        # 마지막 키-값 쌍이 불완전하면 제거
+        if json_str.count('"') % 2 != 0:
+            # 마지막 불완전한 문자열 찾아 제거
+            last_quote = json_str.rfind('"')
+            if last_quote > 0:
+                # 마지막 쉼표까지 잘라내기
+                last_comma = json_str.rfind(',', 0, last_quote)
+                if last_comma > 0:
+                    json_str = json_str[:last_comma] + json_str[last_quote+1:].lstrip()
+        
+        return json_str
     
     def _sanitize_json_fields(self, data: Dict, max_str_len: int = 1000) -> Dict:
         """JSON 필드 정제 - 긴 문자열 잘라내기, 반복 패턴 제거"""
