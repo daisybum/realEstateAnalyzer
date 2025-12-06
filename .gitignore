@@ -6,3 +6,15 @@ __pycache__/
 .idea/
 analysis_results/
 temp_images/
+
+# venv
+.venv/
+
+# test code
+test_output/
+batch_output/
+run_integration_test.sh
+
+# models
+models/
+.gguf

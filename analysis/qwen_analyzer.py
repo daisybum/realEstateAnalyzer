@@ -1,7 +1,8 @@
 """
 Qwen VL Analyzer
 
-vLLM 서버 기반 Qwen Vision-Language 모델 분석기
+vLLM/Llama.cpp 서버 기반 Qwen Vision-Language 모델 분석기
+OpenAI 호환 API를 지원하는 모든 서버(vLLM, llama-server 등) 사용 가능
 청크 기반 대용량 이미지 처리 지원
 """
 import json
@@ -15,9 +16,9 @@ logger = logging.getLogger(__name__)
 
 
 class QwenAnalyzer:
-    """vLLM 기반 Qwen VL 분석기
+    """OpenAI 호환 API 기반 Qwen VL 분석기
     
-    OpenAI 호환 API를 사용하여 멀티모달 분석 수행
+    vLLM, llama.cpp 등 OpenAI 호환 API를 제공하는 서버를 사용하여 멀티모달 분석 수행
     대용량 이미지는 청크 단위로 분할 처리 후 결과 병합
     
     Example:
