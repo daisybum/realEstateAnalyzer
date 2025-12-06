@@ -106,9 +106,12 @@ class AnalysisPipeline:
             
             # 4. 인사이트 생성
             region_name = self._extract_region_name(facts_json)
-            insight = self._generate_insight(
+            insight_raw = self._generate_insight(
                 region_name, facts_json, verification, sentiment
             )
+            
+            # 5. 인사이트 후처리 (반복 패턴 제거)
+            insight = self._remove_repetition(insight_raw)
             
             # 결과 저장 (신뢰도 점수 포함)
             result = {
@@ -370,6 +373,63 @@ class AnalysisPipeline:
                 return name_match.group(1)
             
             return "Unknown Region"
+    
+    def _remove_repetition(self, text: str, min_pattern_len: int = 50) -> str:
+        """인사이트 텍스트에서 반복 패턴 감지 및 제거
+        
+        Args:
+            text: 원본 인사이트 텍스트
+            min_pattern_len: 최소 반복 패턴 길이
+            
+        Returns:
+            반복이 제거된 텍스트
+        """
+        import re
+        
+        if len(text) < min_pattern_len * 3:
+            return text
+        
+        # 방법 1: 동일 문장 3회 이상 반복 감지
+        # "→ **하지만**" 같은 패턴이 반복되는지 확인
+        sentences = re.split(r'(?<=[.!?→])\s+', text)
+        
+        seen = {}
+        first_repeat_idx = -1
+        
+        for i, sentence in enumerate(sentences):
+            # 짧은 문장은 무시
+            if len(sentence) < 20:
+                continue
+            
+            key = sentence.strip()[:50]  # 첫 50자로 비교
+            if key in seen:
+                seen[key] += 1
+                if seen[key] >= 3 and first_repeat_idx == -1:
+                    first_repeat_idx = i - 2  # 첫 반복 위치
+            else:
+                seen[key] = 1
+        
+        if first_repeat_idx > 0:
+            # 반복 시작 전까지만 유지
+            truncated = ' '.join(sentences[:first_repeat_idx])
+            logger.warning(f"Repetition detected and removed at position {first_repeat_idx}")
+            return truncated + "\n\n> ⚠️ **경고**: 반복 패턴 감지로 인해 내용이 잘렸습니다."
+        
+        # 방법 2: 긴 청크 반복 감지 (100자 단위)
+        chunk_size = 100
+        if len(text) > chunk_size * 5:
+            chunks = [text[i:i+chunk_size] for i in range(0, len(text) - chunk_size, chunk_size)]
+            
+            for i, chunk in enumerate(chunks):
+                # 같은 청크가 3번 이상 나타나면 반복
+                count = sum(1 for c in chunks[i:] if c == chunk)
+                if count >= 3:
+                    # 첫 번째 반복 위치까지만 유지
+                    truncate_pos = i * chunk_size
+                    logger.warning(f"Long repetition detected, truncating at {truncate_pos}")
+                    return text[:truncate_pos] + "\n\n> ⚠️ **경고**: 반복 패턴 감지로 인해 내용이 잘렸습니다."
+        
+        return text
     
     def _save_result(self, report_id: str, result: dict) -> None:
         """결과 저장"""

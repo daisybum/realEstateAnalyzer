@@ -28,7 +28,7 @@ class QwenAnalyzer:
     DEFAULT_MODEL = "Qwen/Qwen3-VL-30B-A3B-Instruct"
     DEFAULT_TEMPERATURE = 0.1
     DEFAULT_MAX_TOKENS = 8192
-    MAX_IMAGES_PER_CHUNK = 12  # 32768 토큰 제한에 맞춤 (이미지당 ~2000토큰 + 프롬프트 여유)
+    MAX_IMAGES_PER_CHUNK = 8  # 더 작은 청크로 토큰 오버플로우 방지
     
     def __init__(self, 
                  api_key: str = "EMPTY", 
@@ -364,9 +364,25 @@ class QwenAnalyzer:
         return result
     
     def _resolve_scalar_conflict(self, key: str, values: List) -> Any:
-        """스칼라 값 충돌 해결 - 최빈값 선택"""
+        """스칼라 값 충돌 해결 - 비현실적 값 필터링 + 최빈값 선택"""
         if len(values) == 1:
             return values[0]
+        
+        # 비현실적 값 필터링 (구/군 단위 기준)
+        # 한국의 구/군 인구는 대부분 50만 이하
+        REASONABLE_LIMITS = {
+            'population': 1_000_000,       # 인구 100만 이하
+            'worker_count': 500_000,       # 종사자 50만 이하
+            'supply_volume_3yr': 100_000,  # 3년 공급량 10만 이하
+            'appropriate_demand': 50_000,  # 적정수요 5만 이하
+        }
+        
+        if key in REASONABLE_LIMITS:
+            limit = REASONABLE_LIMITS[key]
+            filtered = [v for v in values if isinstance(v, (int, float)) and v <= limit]
+            if filtered:
+                values = filtered
+                logger.debug(f"Filtered unrealistic values for '{key}': kept {len(filtered)} values")
         
         # 숫자 필드 충돌 감지
         numeric_values = [v for v in values if isinstance(v, (int, float))]
