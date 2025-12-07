@@ -1,7 +1,8 @@
 """
 Qwen VL Analyzer
 
-vLLM 서버 기반 Qwen Vision-Language 모델 분석기
+vLLM/Llama.cpp 서버 기반 Qwen Vision-Language 모델 분석기
+OpenAI 호환 API를 지원하는 모든 서버(vLLM, llama-server 등) 사용 가능
 청크 기반 대용량 이미지 처리 지원
 """
 import json
@@ -15,9 +16,9 @@ logger = logging.getLogger(__name__)
 
 
 class QwenAnalyzer:
-    """vLLM 기반 Qwen VL 분석기
+    """OpenAI 호환 API 기반 Qwen VL 분석기
     
-    OpenAI 호환 API를 사용하여 멀티모달 분석 수행
+    vLLM, llama.cpp 등 OpenAI 호환 API를 제공하는 서버를 사용하여 멀티모달 분석 수행
     대용량 이미지는 청크 단위로 분할 처리 후 결과 병합
     
     Example:
@@ -451,12 +452,25 @@ class QwenAnalyzer:
         content = [{"type": "text", "text": text}]
         
         for img_path in images:
-            content.append({
-                "type": "image_url",
-                "image_url": {"url": f"file://{img_path}"}
-            })
+            # 로컬 파일인 경우 base64로 인코딩하여 전송 (컨테이너/호스트 경로 문제 해결)
+            try:
+                base64_image = self._encode_image(img_path)
+                image_url = f"data:image/jpeg;base64,{base64_image}"
+                content.append({
+                    "type": "image_url",
+                    "image_url": {"url": image_url}
+                })
+            except Exception as e:
+                logger.warning(f"Failed to load image {img_path}: {e}")
         
         return content
+
+    def _encode_image(self, image_path: str) -> str:
+        """이미지 파일을 base64 문자열로 인코딩"""
+        import base64
+        
+        with open(image_path, "rb") as image_file:
+            return base64.b64encode(image_file.read()).decode('utf-8')
 
 
 if __name__ == "__main__":
